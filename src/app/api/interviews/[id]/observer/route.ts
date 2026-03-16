@@ -18,5 +18,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     answerTranscripts: session.answerTranscripts || {},
     profileAnalysis: session.profileAnalysis,
     dailyRoomUrl: session.dailyRoomUrl,
+    report: session.report || null,
   });
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sessionManager } from '@/lib/session-manager';
 import { geminiService } from '@/lib/gemini-service';
 import { ScoringEngine } from '@/lib/scoring-engine';
+import { sendInterviewReport } from '@/lib/email';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -86,6 +87,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     await sessionManager.updateSession(id, { report });
+
+    // Email report PDF to recruiter (non-blocking)
+    if (session.recruiterEmail) {
+      sendInterviewReport({
+        recruiterEmail: session.recruiterEmail,
+        recruiterName: session.recruiterName,
+        report,
+        session: {
+          id: session.id,
+          candidateName: session.candidate?.name,
+          position: session.jd?.title,
+          client: session.jd?.client,
+          observerUrl: session.observerUrl,
+        },
+      }).catch(err => console.error('[Email] Report send failed:', err));
+    }
+
     return NextResponse.json(report);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

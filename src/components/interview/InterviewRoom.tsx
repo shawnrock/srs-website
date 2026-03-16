@@ -32,17 +32,25 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
   const deepgramWsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const isInterviewActiveRef = useRef(false);
+  const currentQuestionRef = useRef(0);
   const faceLandmarkerRef = useRef<any>(null);
   const gazeStateRef = useRef<any>({ lookDownStart: null, lookAwayStart: null, lastAlert: {}, lastFaceSeen: null });
 
+  // Keep currentQuestionRef in sync so Deepgram callback can read latest value
+  useEffect(() => { currentQuestionRef.current = currentQuestion; }, [currentQuestion]);
+
   const sendAlert = useCallback((check: string, severity: string, detail: string) => {
+    const alert = { check, severity, detail, timestamp: Date.now() };
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: 'proctor_alert',
-        alert: { check, severity, detail, timestamp: Date.now() }
-      }));
+      wsRef.current.send(JSON.stringify({ type: 'proctor_alert', alert }));
     }
-  }, []);
+    // Always persist via REST so observer sees it even without WS
+    fetch(`/api/interviews/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alert }),
+    }).catch(() => {});
+  }, [sessionId]);
 
   const processProctorResult = useCallback((result: any, now: number) => {
     const faces = result.faceLandmarks ?? [];
@@ -73,9 +81,6 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       gaze.lookDownStart = null;
       gaze.lookAwayStart = null;
       setProctorStatus({ faceDetected: false, faceCount: 0, eyeContact: false, gazeX: 0.5, gazeY: 0.5 });
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'face_data', detected: false, faceCount: 0, eyeContact: false }));
-      }
       return;
     }
 
@@ -131,9 +136,6 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
 
     const eyeContact = !lookingDown && !lookingAway;
     setProctorStatus({ faceDetected: true, faceCount, eyeContact, gazeX, gazeY });
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'face_data', detected: true, faceCount, eyeContact, gazeDirection: { x: Math.round(gazeX * 100) / 100, y: Math.round(gazeY * 100) / 100 } }));
-    }
   }, [sendAlert]);
 
   useEffect(() => {
@@ -156,7 +158,18 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     fetch(`/api/interviews/${sessionId}`)
       .then(r => { if (!r.ok) throw new Error('Session not found'); return r.json(); })
-      .then(data => { if (data.error) throw new Error(data.error); setSession(data); setTotalQuestions(data.totalQuestions || 5); setState(STATES.SETUP); })
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        setSession(data);
+        setTotalQuestions(data.totalQuestions || 5);
+        setState(STATES.SETUP);
+        // Notify observer that candidate has arrived (REST fallback for Vercel)
+        fetch(`/api/interviews/${sessionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'waiting' }),
+        }).catch(() => {});
+      })
       .catch(err => { setError('Interview session not found or has expired. Please contact your recruiter for a new link.'); setState(STATES.ERROR); });
   }, [sessionId]);
 
@@ -213,7 +226,15 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
           const isFinal = data?.is_final;
           if (!transcript) return;
           if (isFinal) {
-            if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'transcript_update', text: transcript, isFinal: true }));
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'transcript_update', text: transcript, isFinal: true }));
+            }
+            // Persist via REST for Vercel (no WS) and for report generation
+            fetch(`/api/interviews/${sessionId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transcript, questionIndex: currentQuestionRef.current }),
+            }).catch(() => {});
             setFullTranscript(prev => prev + transcript + ' ');
             setLiveTranscript('');
           } else { setLiveTranscript(transcript); }
@@ -278,6 +299,43 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
     ws.onclose = () => { wsRef.current = null; };
   }, [sessionId, state]);
 
+  // REST polling — detects interview start, question changes, and completion
+  // when WS is unavailable (Vercel serverless)
+  useEffect(() => {
+    if (state !== STATES.READY && state !== STATES.INTERVIEW) return;
+    let stopped = false;
+    const poll = setInterval(async () => {
+      if (stopped) return;
+      try {
+        const r = await fetch(`/api/interviews/${sessionId}`);
+        const data = await r.json();
+        if (stopped) return;
+        if (data.status === 'in_progress') {
+          if (state === STATES.READY) {
+            setCurrentQuestion(data.currentQuestion ?? 0);
+            currentQuestionRef.current = data.currentQuestion ?? 0;
+            isInterviewActiveRef.current = true;
+            setState(STATES.INTERVIEW);
+            startDeepgramSTTRef.current();
+          } else if (state === STATES.INTERVIEW && data.currentQuestion !== undefined && data.currentQuestion !== currentQuestionRef.current) {
+            setCurrentQuestion(data.currentQuestion);
+            currentQuestionRef.current = data.currentQuestion;
+            setFullTranscript('');
+            setLiveTranscript('');
+          }
+        }
+        if (data.status === 'completed' && state === STATES.INTERVIEW) {
+          isInterviewActiveRef.current = false;
+          stopDeepgramSTTRef.current();
+          if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
+          setState(STATES.COMPLETE);
+          clearInterval(poll);
+        }
+      } catch (_) {}
+    }, 3000);
+    return () => { stopped = true; clearInterval(poll); };
+  }, [sessionId, state]);
+
   useEffect(() => {
     return () => {
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
@@ -296,13 +354,13 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.hidden && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'proctor_alert', alert: { check: 'Tab Switch', severity: 'warning', detail: `Tab switch detected at ${new Date().toLocaleTimeString()}`, timestamp: Date.now() } }));
+      if (document.hidden && isInterviewActiveRef.current) {
+        sendAlert('Tab Switch', 'warning', `Tab switch detected at ${new Date().toLocaleTimeString()}`);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, []);
+  }, [sendAlert]);
 
   useEffect(() => {
     if (state !== STATES.INTERVIEW || !videoRef.current) return;
@@ -328,7 +386,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       if (avgBrightness < 8) {
         blackFrameCount++;
         if (blackFrameCount >= 5 && now - lastBlackAlert > 10000) {
-          if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'proctor_alert', alert: { check: 'Camera Turned Off', severity: 'high', detail: `Camera feed is black at ${new Date().toLocaleTimeString()}`, timestamp: Date.now() } }));
+          sendAlert('Camera Turned Off', 'high', `Camera feed is black at ${new Date().toLocaleTimeString()}`);
           lastBlackAlert = now;
           blackFrameCount = 0;
         }
@@ -346,7 +404,6 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         }
         const detected = skinPixels / (80 * 60) > 0.04;
         setProctorStatus(prev => ({ ...prev, faceDetected: detected, faceCount: detected ? 1 : 0 }));
-        if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'face_data', detected, eyeContact: detected, faceCount: detected ? 1 : 0 }));
       }
     };
     frameId = requestAnimationFrame(loop);

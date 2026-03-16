@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, RefreshCw, ExternalLink, Users, Clock, CheckCircle, Circle, AlertCircle, LogOut } from "lucide-react";
+import { Plus, RefreshCw, ExternalLink, Users, Clock, CheckCircle, Circle, AlertCircle, LogOut, Copy, Trash2 } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   scheduled: { label: "Scheduled", color: "#a16207", bg: "#fef9c3" },
@@ -27,6 +27,8 @@ export default function AdminDashboard() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
   const fetchSessions = useCallback(async () => {
     try {
       const res = await fetch("/api/interviews");
@@ -35,6 +37,19 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   }, []);
+
+  const copyLink = (sessionId: string, interviewUrl: string) => {
+    const link = interviewUrl || `${window.location.origin}/ai-interview/session/${sessionId}`;
+    navigator.clipboard.writeText(link);
+    setCopiedId(sessionId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const deleteSession = async (sessionId: string) => {
+    if (!confirm("Cancel and delete this interview session?")) return;
+    await fetch(`/api/interviews/${sessionId}`, { method: "DELETE" });
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
+  };
 
   useEffect(() => {
     const auth = localStorage.getItem("ai_interview_auth");
@@ -136,6 +151,11 @@ export default function AdminDashboard() {
                       {st.label}
                     </span>
                     <div className="flex items-center gap-2">
+                      <button onClick={() => copyLink(s.id, s.interviewUrl)}
+                        title="Copy candidate interview link"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-teal text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity">
+                        <Copy size={12} /> {copiedId === s.id ? "Copied!" : "Copy Link"}
+                      </button>
                       <Link href={`/ai-interview/observe/${s.id}`}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-light transition-colors">
                         <ExternalLink size={12} /> Observe
@@ -145,6 +165,13 @@ export default function AdminDashboard() {
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-teal text-white text-xs font-semibold rounded-lg hover:bg-teal-dark transition-colors">
                           Report
                         </Link>
+                      )}
+                      {s.status !== "in_progress" && (
+                        <button onClick={() => deleteSession(s.id)}
+                          title="Delete this interview"
+                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   </div>

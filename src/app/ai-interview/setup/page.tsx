@@ -27,6 +27,7 @@ export default function SetupInterviewPage() {
     setError("");
 
     try {
+      const auth = JSON.parse(localStorage.getItem("ai_interview_auth") || "{}");
       const res = await fetch("/api/interviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -42,6 +43,8 @@ export default function SetupInterviewPage() {
             phone: formData.candidatePhone,
             resume: formData.candidateResume,
           },
+          recruiterEmail: auth.email,
+          recruiterName: auth.name,
         }),
       });
 

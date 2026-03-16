@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // ============================================
-// OBSERVER / INTERVIEWER DASHBOARD
+// INTERVIEWER DASHBOARD
 // SRS Infoway — AI Interview Platform
 // ============================================
 
@@ -116,7 +116,7 @@ const Btn = ({ onClick, disabled, variant = 'primary', size = 'md', children, st
   );
 };
 
-export default function ObserverDashboard({ sessionId }: { sessionId: string }) {
+export default function InterviewerDashboard({ sessionId }: { sessionId: string }) {
   const [session, setSession] = useState<any>(null);
   const [status, setStatus] = useState('connecting');
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -137,6 +137,7 @@ export default function ObserverDashboard({ sessionId }: { sessionId: string }) 
 
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const reportFetchedRef = useRef(false);
 
   useEffect(() => {
     if (navigator.permissions) {
@@ -164,37 +165,79 @@ export default function ObserverDashboard({ sessionId }: { sessionId: string }) 
   };
 
   useEffect(() => {
-    fetch(`/api/interviews/${sessionId}/observer`)
-      .then(r => r.json())
-      .then(async data => {
+    let stopped = false;
+
+    const loadSession = async () => {
+      try {
+        const r = await fetch(`/api/interviews/${sessionId}/observer`);
+        const data = await r.json();
+        if (stopped) return;
         setSession(data);
         setQuestions(data.questions || []);
         setCurrentQuestion(data.currentQuestion || 0);
         setAnswerTranscripts(data.answerTranscripts || {});
         setProctorAlerts(data.proctorAlerts || []);
-        if (data.status === 'in_progress') setInterviewStarted(true);
-        if (data.status === 'completed' && data.report) {
-          setReport(data.report);
+        if (data.status === 'in_progress') { setInterviewStarted(true); setStatus('in_progress'); }
+        if (data.status === 'completed') {
           setStatus('completed');
+          if (data.report) setReport(data.report);
         }
-        if (data.candidateConnected || data.candidateWs) setCandidateConnected(true);
+        if (data.status === 'waiting' || data.status === 'in_progress' || data.candidateConnected || data.candidateWs) {
+          setCandidateConnected(true);
+        }
         if (data.profileAnalysis) setProfileAnalysis(data.profileAnalysis);
 
         try {
-          const tokenRes = await fetch(`/api/interviews/${sessionId}/daily-token?role=observer`);
-          if (tokenRes.ok) {
+          const tokenRes = await fetch(`/api/interviews/${sessionId}/daily-token?role=interviewer`);
+          if (tokenRes.ok && !stopped) {
             const { roomUrl, token } = await tokenRes.json();
             setDailyUrl(`${roomUrl}?t=${token}&userName=Interviewer`);
           }
         } catch (err: any) {
-          console.warn('[Daily.co] Observer token fetch failed:', err.message);
+          console.warn('[Daily.co] Interviewer token fetch failed:', err.message);
         }
-      })
-      .catch(err => console.error('[API] Failed to load session:', err));
+      } catch (err) {
+        console.error('[API] Failed to load session:', err);
+      }
+    };
+
+    loadSession();
+
+    // Poll REST every 4 s — primary mechanism on Vercel where WS is unavailable
+    const poll = setInterval(async () => {
+      if (stopped) return;
+      try {
+        const r = await fetch(`/api/interviews/${sessionId}/observer`);
+        const data = await r.json();
+        if (stopped) return;
+        if (data.status === 'waiting' || data.status === 'in_progress') setCandidateConnected(true);
+        if (data.status === 'in_progress') { setInterviewStarted(true); setStatus('in_progress'); }
+        if (data.status === 'completed') {
+          setStatus('completed');
+          clearInterval(poll);
+          if (data.report) {
+            setReport(data.report);
+            reportFetchedRef.current = true;
+          } else if (!reportFetchedRef.current) {
+            reportFetchedRef.current = true;
+            setGeneratingReport(true);
+            fetch(`/api/interviews/${sessionId}/report`)
+              .then(res => res.json())
+              .then(rpt => { setReport(rpt); setGeneratingReport(false); })
+              .catch(() => setGeneratingReport(false));
+          }
+        }
+        if (data.answerTranscripts) setAnswerTranscripts(data.answerTranscripts);
+        if (data.proctorAlerts) setProctorAlerts(data.proctorAlerts);
+        if (data.currentQuestion !== undefined) setCurrentQuestion(data.currentQuestion);
+      } catch (_) {}
+    }, 4000);
+
+    return () => { stopped = true; clearInterval(poll); };
   }, [sessionId]);
 
   useEffect(() => {
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws?session=${sessionId}&role=observer`;
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws?session=${sessionId}&role=interviewer`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -258,9 +301,64 @@ export default function ObserverDashboard({ sessionId }: { sessionId: string }) 
     return () => clearTimeout(t);
   }, [latestAlert]);
 
-  const startInterview = () => wsRef.current?.send(JSON.stringify({ type: 'start_interview' }));
-  const nextQuestion   = () => wsRef.current?.send(JSON.stringify({ type: 'next_question' }));
-  const endInterview   = () => wsRef.current?.send(JSON.stringify({ type: 'end_interview' }));
+  const patchSession = (body: object) =>
+    fetch(`/api/interviews/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  const startInterview = async () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'start_interview' }));
+    } else {
+      await patchSession({ action: 'start_interview' });
+      setInterviewStarted(true);
+      setCurrentQuestion(0);
+      setStatus('in_progress');
+    }
+  };
+
+  const nextQuestion = async () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'next_question' }));
+    } else {
+      const res = await patchSession({ action: 'next_question' });
+      const data = await res.json();
+      if (data.status === 'completed') {
+        setStatus('completed');
+        if (!reportFetchedRef.current) {
+          reportFetchedRef.current = true;
+          setGeneratingReport(true);
+          fetch(`/api/interviews/${sessionId}/report`)
+            .then(r => r.json())
+            .then(rpt => { setReport(rpt); setGeneratingReport(false); })
+            .catch(() => setGeneratingReport(false));
+        }
+      } else {
+        setCurrentQuestion(data.currentQuestion ?? currentQuestion + 1);
+        setLiveTranscript('');
+      }
+    }
+  };
+
+  const endInterview = async () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'end_interview' }));
+    } else {
+      await patchSession({ action: 'end_interview' });
+      setStatus('completed');
+      if (!reportFetchedRef.current) {
+        reportFetchedRef.current = true;
+        setGeneratingReport(true);
+        fetch(`/api/interviews/${sessionId}/report`)
+          .then(r => r.json())
+          .then(rpt => { setReport(rpt); setGeneratingReport(false); })
+          .catch(() => setGeneratingReport(false));
+      }
+    }
+  };
+
   const isLastQuestion = currentQuestion >= questions.length - 1;
 
   // ── REPORT VIEW ────────────────────────────────────────────────
@@ -281,7 +379,7 @@ export default function ObserverDashboard({ sessionId }: { sessionId: string }) 
             }}>SRS</div>
             <div>
               <div style={{ fontWeight: 700, fontSize: 15 }}>SRS Infoway</div>
-              <div style={{ fontSize: 11, color: C.textMuted }}>Interview Evaluation Report</div>
+              <div style={{ fontSize: 11, color: C.textMuted }}>Interviewer — Evaluation Report</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -471,7 +569,7 @@ export default function ObserverDashboard({ sessionId }: { sessionId: string }) 
           }}>SRS</div>
           <span style={{ fontWeight: 700, fontSize: 15 }}>SRS Infoway</span>
           <Badge color={interviewStarted ? 'indigo' : 'gray'}>
-            {interviewStarted ? '● Interview in Progress' : 'Interviewer Panel'}
+            {interviewStarted ? '● Interview in Progress' : 'Interviewer Dashboard'}
           </Badge>
         </div>
 

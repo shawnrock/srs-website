@@ -23,7 +23,7 @@ async function createDailyToken(roomName: string, role: string): Promise<string>
     body: JSON.stringify({
       properties: {
         room_name: roomName,
-        is_owner: role === 'observer',
+        is_owner: role === 'observer' || role === 'interviewer',
         exp: Math.floor(Date.now() / 1000) + 3600,
       },
     }),

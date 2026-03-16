@@ -62,7 +62,7 @@ export default function AIInterviewPage() {
               { icon: Video, title: 'HD Video Interviews', desc: 'Integrated Daily.co video conferencing with crystal-clear HD quality. Candidates and interviewers connect seamlessly.' },
               { icon: Shield, title: 'Real-time Proctoring', desc: 'MediaPipe face detection monitors gaze direction, multiple faces, tab switching, and camera-off events throughout the interview.' },
               { icon: BarChart3, title: 'Instant AI Scoring', desc: 'Post-interview AI evaluation scores technical depth, communication, confidence, and keyword coverage across all answers.' },
-              { icon: Users, title: 'Observer Dashboard', desc: 'Live interviewer dashboard showing real-time transcripts, proctor alerts, and candidate video — all in one view.' },
+              { icon: Users, title: 'Interviewer Dashboard', desc: 'Live interviewer dashboard showing real-time transcripts, proctor alerts, and candidate video — all in one view.' },
               { icon: Star, title: 'Comprehensive Reports', desc: 'Detailed candidate reports with section scores, strengths, weaknesses, and hire/no-hire recommendations.' },
             ].map(({ icon: Icon, title, desc }, i) => (
               <div key={i} className="p-6 bg-surface rounded-xl border border-gray-100 hover:border-accent/30 transition-colors">

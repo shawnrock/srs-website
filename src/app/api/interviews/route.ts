@@ -20,13 +20,13 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { jd, candidate } = body;
+    const { jd, candidate, recruiterEmail, recruiterName } = body;
 
     if (!jd?.title || !jd?.description || !candidate?.name || !candidate?.email) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const session = await sessionManager.createSession(jd, candidate);
+    const session = await sessionManager.createSession(jd, candidate, recruiterEmail, recruiterName);
 
     // Generate questions and profile analysis in parallel
     const [questions, profileAnalysis] = await Promise.allSettled([

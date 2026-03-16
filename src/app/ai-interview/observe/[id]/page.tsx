@@ -1,10 +1,11 @@
 "use client";
-import { use } from "react";
-import dynamic from "next/dynamic";
+import { use, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-const ObserverDashboard = dynamic(() => import("@/components/interview/ObserverDashboard"), { ssr: false });
-
-export default function ObservePage({ params }: { params: Promise<{ id: string }> }) {
+// Legacy URL — redirect to the new interviewer route
+export default function ObserveLegacyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  return <ObserverDashboard sessionId={id} />;
+  const router = useRouter();
+  useEffect(() => { router.replace(`/ai-interview/interview/${id}`); }, [id, router]);
+  return null;
 }
