@@ -35,7 +35,7 @@ async function createDailyToken(roomName: string, role: string): Promise<string>
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = sessionManager.getSession(id);
+  let session = await sessionManager.getSession(id);
   if (!session) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
@@ -46,11 +46,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Create room if not exists
     if (!session.dailyRoomName) {
       const room = await createDailyRoom();
-      session.dailyRoomName = room.name;
-      session.dailyRoomUrl = room.url;
+      await sessionManager.updateSession(id, { dailyRoomName: room.name, dailyRoomUrl: room.url });
+      session = await sessionManager.getSession(id) || session;
     }
 
-    const token = await createDailyToken(session.dailyRoomName, role);
+    const token = await createDailyToken(session.dailyRoomName!, role);
     return NextResponse.json({ roomUrl: session.dailyRoomUrl, token });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

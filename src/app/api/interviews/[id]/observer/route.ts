@@ -3,7 +3,7 @@ import { sessionManager } from '@/lib/session-manager';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = sessionManager.getSession(id);
+  const session = await sessionManager.getSession(id);
   if (!session) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }

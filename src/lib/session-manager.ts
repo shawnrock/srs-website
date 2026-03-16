@@ -1,3 +1,4 @@
+import { Redis } from '@upstash/redis';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface Session {
@@ -9,12 +10,10 @@ export interface Session {
   proctorAlerts: Array<{ check: string; severity: string; detail: string; timestamp: number }>;
   answerTranscripts: Record<number, string>;
   currentQuestion: number;
-  candidateWs: any | null;
-  observerWs: Set<any>;
   status: 'scheduled' | 'waiting' | 'in_progress' | 'completed' | 'abandoned';
   profileAnalysis: any | null;
-  createdAt: Date;
-  lastActivityAt: Date;
+  createdAt: string;
+  lastActivityAt: string;
   interviewUrl: string;
   observerUrl: string;
   report: any | null;
@@ -22,101 +21,116 @@ export interface Session {
   dailyRoomUrl?: string;
 }
 
+const SESSION_TTL = 60 * 60 * 24; // 24 hours in seconds
+
+function getRedis(): Redis {
+  return new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  });
+}
+
+// In-memory fallback for local dev (when Redis env vars not set)
+const localSessions = new Map<string, Session>();
+
+function isRedisConfigured(): boolean {
+  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
 class SessionManager {
-  private sessions: Map<string, Session> = new Map();
   private static instance: SessionManager;
-
-  private constructor() {
-    // Clean up expired sessions every 30 minutes
-    setInterval(() => this.cleanup(), 30 * 60 * 1000);
-  }
-
   static getInstance(): SessionManager {
-    if (!SessionManager.instance) {
-      SessionManager.instance = new SessionManager();
-    }
+    if (!SessionManager.instance) SessionManager.instance = new SessionManager();
     return SessionManager.instance;
   }
 
-  createSession(jd: Session['jd'], candidate: Session['candidate']): Session {
+  async createSession(jd: Session['jd'], candidate: Session['candidate']): Promise<Session> {
     const id = uuidv4();
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const session: Session = {
-      id,
-      jd,
-      candidate,
-      questions: [],
-      scores: {},
-      proctorAlerts: [],
-      answerTranscripts: {},
-      currentQuestion: 0,
-      candidateWs: null,
-      observerWs: new Set(),
-      status: 'scheduled',
-      profileAnalysis: null,
-      createdAt: new Date(),
-      lastActivityAt: new Date(),
+      id, jd, candidate,
+      questions: [], scores: {}, proctorAlerts: [], answerTranscripts: {},
+      currentQuestion: 0, status: 'scheduled', profileAnalysis: null,
+      createdAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
       interviewUrl: `${baseUrl}/ai-interview/session/${id}`,
       observerUrl: `${baseUrl}/ai-interview/observe/${id}`,
       report: null,
     };
-    this.sessions.set(id, session);
+    if (isRedisConfigured()) {
+      await getRedis().setex(`session:${id}`, SESSION_TTL, session);
+    } else {
+      localSessions.set(id, session);
+    }
     return session;
   }
 
-  getSession(id: string): Session | undefined {
-    const session = this.sessions.get(id);
-    if (session) session.lastActivityAt = new Date();
-    return session;
+  async getSession(id: string): Promise<Session | null> {
+    if (isRedisConfigured()) {
+      const data = await getRedis().get<Session>(`session:${id}`);
+      if (!data) return null;
+      // Refresh TTL on access
+      await getRedis().expire(`session:${id}`, SESSION_TTL);
+      return data;
+    }
+    return localSessions.get(id) || null;
   }
 
-  getAllSessions(): Session[] {
-    return Array.from(this.sessions.values()).sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-    );
-  }
-
-  addObserver(sessionId: string, ws: any): void {
-    const session = this.sessions.get(sessionId);
-    if (session) session.observerWs.add(ws);
-  }
-
-  removeObserver(sessionId: string, ws: any): void {
-    const session = this.sessions.get(sessionId);
-    if (session) session.observerWs.delete(ws);
-  }
-
-  broadcastToObservers(sessionId: string, message: object): void {
-    const session = this.sessions.get(sessionId);
+  async updateSession(id: string, updates: Partial<Session>): Promise<void> {
+    const session = await this.getSession(id);
     if (!session) return;
-    const payload = JSON.stringify(message);
-    session.observerWs.forEach((ws) => {
-      if (ws.readyState === 1) ws.send(payload);
-    });
-  }
-
-  updateSessionStatus(sessionId: string, status: Session['status']): void {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      session.status = status;
-      session.lastActivityAt = new Date();
+    const updated: Session = { ...session, ...updates, lastActivityAt: new Date().toISOString() };
+    if (isRedisConfigured()) {
+      await getRedis().setex(`session:${id}`, SESSION_TTL, updated);
+    } else {
+      localSessions.set(id, updated);
     }
   }
 
-  deleteSession(sessionId: string): boolean {
-    return this.sessions.delete(sessionId);
+  async getAllSessions(): Promise<Session[]> {
+    if (isRedisConfigured()) {
+      const redis = getRedis();
+      const keys = await redis.keys('session:*');
+      if (!keys.length) return [];
+      const sessions = await Promise.all(keys.map(k => redis.get<Session>(k)));
+      return sessions
+        .filter((s): s is Session => s !== null)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    return Array.from(localSessions.values())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
-  private cleanup(): void {
-    const now = Date.now();
-    this.sessions.forEach((session, id) => {
-      const age = now - session.lastActivityAt.getTime();
-      if (session.status === 'completed' && age > 24 * 60 * 60 * 1000) {
-        this.sessions.delete(id);
-      } else if (session.status !== 'completed' && age > 4 * 60 * 60 * 1000) {
-        this.sessions.delete(id);
-      }
-    });
+  async deleteSession(id: string): Promise<boolean> {
+    if (isRedisConfigured()) {
+      const result = await getRedis().del(`session:${id}`);
+      return result > 0;
+    }
+    return localSessions.delete(id);
+  }
+
+  async updateSessionStatus(id: string, status: Session['status']): Promise<void> {
+    await this.updateSession(id, { status });
+  }
+
+  // WebSocket helpers (in-memory only — used by standalone server, not Vercel)
+  private wsConnections = new Map<string, { candidateWs: any; observerWs: Set<any> }>();
+
+  addObserver(sessionId: string, ws: any): void {
+    if (!this.wsConnections.has(sessionId))
+      this.wsConnections.set(sessionId, { candidateWs: null, observerWs: new Set() });
+    this.wsConnections.get(sessionId)!.observerWs.add(ws);
+  }
+
+  removeObserver(sessionId: string, ws: any): void {
+    this.wsConnections.get(sessionId)?.observerWs.delete(ws);
+  }
+
+  broadcastToObservers(sessionId: string, message: object): void {
+    const conns = this.wsConnections.get(sessionId);
+    if (!conns) return;
+    const payload = JSON.stringify(message);
+    conns.observerWs.forEach(ws => { if (ws.readyState === 1) ws.send(payload); });
   }
 }
 

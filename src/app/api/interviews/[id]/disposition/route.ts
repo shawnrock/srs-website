@@ -3,16 +3,21 @@ import { sessionManager } from '@/lib/session-manager';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = sessionManager.getSession(id);
+  const session = await sessionManager.getSession(id);
   if (!session) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
   const body = await req.json();
   if (session.report) {
-    session.report.disposition = body.disposition;
-    session.report.dispositionNotes = body.notes;
-    session.report.dispositionBy = body.by;
-    session.report.dispositionAt = new Date().toISOString();
+    await sessionManager.updateSession(id, {
+      report: {
+        ...session.report,
+        disposition: body.disposition,
+        dispositionNotes: body.notes,
+        dispositionBy: body.by,
+        dispositionAt: new Date().toISOString(),
+      },
+    });
   }
   return NextResponse.json({ success: true });
 }

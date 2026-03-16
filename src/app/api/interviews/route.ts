@@ -3,7 +3,7 @@ import { sessionManager } from '@/lib/session-manager';
 import { geminiService } from '@/lib/gemini-service';
 
 export async function GET() {
-  const sessions = sessionManager.getAllSessions();
+  const sessions = await sessionManager.getAllSessions();
   return NextResponse.json(sessions.map(s => ({
     id: s.id,
     status: s.status,
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const session = sessionManager.createSession(jd, candidate);
+    const session = await sessionManager.createSession(jd, candidate);
 
     // Generate questions and profile analysis in parallel
     const [questions, profileAnalysis] = await Promise.allSettled([
@@ -34,16 +34,19 @@ export async function POST(req: NextRequest) {
       candidate.resume ? geminiService.analyzeResumeProfile(candidate) : Promise.resolve(null),
     ]);
 
+    let finalQuestions = session.questions;
+    let finalProfileAnalysis = null;
+    let matchScore: number | undefined;
+
     if (questions.status === 'fulfilled') {
-      session.questions = questions.value;
+      finalQuestions = questions.value;
       if (profileAnalysis.status === 'fulfilled' && profileAnalysis.value) {
-        session.profileAnalysis = profileAnalysis.value;
-        session.candidate.matchScore = profileAnalysis.value.matchScore;
+        finalProfileAnalysis = profileAnalysis.value;
+        matchScore = profileAnalysis.value.matchScore;
       }
     } else {
       console.error('Failed to generate questions:', questions.reason);
-      // Use placeholder questions if AI fails
-      session.questions = [
+      finalQuestions = [
         { text: 'Tell me about yourself and your experience.', category: 'Behavioral', keywords: [], difficulty: 'Easy' },
         { text: `What interests you most about the ${jd.title} role?`, category: 'Cultural Fit', keywords: [], difficulty: 'Easy' },
         { text: 'Describe a challenging project you worked on and how you overcame obstacles.', category: 'Problem-Solving', keywords: [], difficulty: 'Medium' },
@@ -52,13 +55,23 @@ export async function POST(req: NextRequest) {
       ];
     }
 
+    const updatedCandidate = matchScore !== undefined
+      ? { ...session.candidate, matchScore }
+      : session.candidate;
+
+    await sessionManager.updateSession(session.id, {
+      questions: finalQuestions,
+      profileAnalysis: finalProfileAnalysis,
+      candidate: updatedCandidate,
+    });
+
     return NextResponse.json({
       id: session.id,
       status: session.status,
       interviewUrl: session.interviewUrl,
       observerUrl: session.observerUrl,
-      questionsCount: session.questions.length,
-      candidate: session.candidate,
+      questionsCount: finalQuestions.length,
+      candidate: updatedCandidate,
       jd: session.jd,
     }, { status: 201 });
   } catch (error: any) {

@@ -5,7 +5,7 @@ import { ScoringEngine } from '@/lib/scoring-engine';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = sessionManager.getSession(id);
+  const session = await sessionManager.getSession(id);
   if (!session) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       };
     }
 
-    session.report = report;
+    await sessionManager.updateSession(id, { report });
     return NextResponse.json(report);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
