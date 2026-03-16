@@ -156,9 +156,9 @@ export default function AdminDashboard() {
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-teal text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity">
                         <Copy size={12} /> {copiedId === s.id ? "Copied!" : "Copy Link"}
                       </button>
-                      <Link href={`/ai-interview/observe/${s.id}`}
+                      <Link href={`/ai-interview/interview/${s.id}`}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-light transition-colors">
-                        <ExternalLink size={12} /> Observe
+                        <ExternalLink size={12} /> Interview
                       </Link>
                       {s.status === "completed" && (
                         <Link href={`/ai-interview/report/${s.id}`}
