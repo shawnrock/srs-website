@@ -118,10 +118,10 @@ export default function Footer() {
           <div className="max-w-7xl mx-auto px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-gray-500">
             <p>&copy; {new Date().getFullYear()} SRS Infoway Inc. All rights reserved.</p>
             <div className="flex gap-6">
-              <Link href="#" className="hover:text-accent transition-colors">Privacy Policy</Link>
-              <Link href="#" className="hover:text-accent transition-colors">Terms of Use</Link>
-              <Link href="#" className="hover:text-accent transition-colors">Cookie Notice</Link>
-              <Link href="#" className="hover:text-accent transition-colors">Accessibility</Link>
+              <Link href="/privacy" className="hover:text-accent transition-colors">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-accent transition-colors">Terms of Use</Link>
+              <Link href="/contact" className="hover:text-accent transition-colors">Cookie Notice</Link>
+              <Link href="/contact" className="hover:text-accent transition-colors">Accessibility</Link>
             </div>
           </div>
         </div>

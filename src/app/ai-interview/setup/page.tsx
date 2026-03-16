@@ -51,6 +51,24 @@ export default function SetupInterviewPage() {
       }
 
       const data = await res.json();
+
+      // Send candidate invite email (best-effort — don't block on failure)
+      try {
+        const baseUrl = window.location.origin;
+        await fetch('/api/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'candidate_invite',
+            candidate: { name: formData.candidateName, email: formData.candidateEmail },
+            jd: { title: formData.jobTitle, client: formData.client },
+            interviewUrl: data.interviewUrl || `${baseUrl}/ai-interview/room/${data.id}`,
+          }),
+        });
+      } catch (emailErr) {
+        console.warn('[Setup] Email send failed (non-blocking):', emailErr);
+      }
+
       router.push(`/ai-interview/observe/${data.id}`);
     } catch (err: any) {
       setError(err.message);

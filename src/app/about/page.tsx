@@ -122,26 +122,60 @@ export default function AboutPage() {
                 <div className="w-24 h-24 rounded-full bg-white/10 border-2 border-white/30 flex items-center justify-center">
                   <Users size={36} className="text-white/60" />
                 </div>
+                <a
+                  href="https://www.linkedin.com/in/shankerbabu"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute top-4 right-4 w-9 h-9 bg-white/10 hover:bg-[#0077b5] rounded-lg flex items-center justify-center transition-colors"
+                  title="View LinkedIn Profile"
+                >
+                  <Linkedin size={16} className="text-white" />
+                </a>
               </div>
               <h3 className="text-lg font-semibold text-primary group-hover:text-accent transition-colors">Shanker Babu</h3>
               <div className="text-accent text-sm font-semibold mb-2">Chief Technology Officer (CTO)</div>
               <p className="text-gray-500 text-sm leading-relaxed">
                 A technology visionary with deep expertise in AI, cloud architecture, and enterprise digital transformation. Shanker architects the technology strategy behind SRS Infoway's proprietary platforms and global delivery model.
               </p>
+              <a
+                href="https://www.linkedin.com/in/shankerbabu"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[#0077b5] hover:underline"
+              >
+                <Linkedin size={14} /> Connect on LinkedIn
+              </a>
             </div>
 
-            {/* COO */}
+            {/* COO — Sangeetha Salem Viswanathan */}
             <div className="group">
-              <div className="bg-gradient-to-br from-primary-light to-primary rounded-xl h-64 mb-5 flex flex-col items-center justify-center gap-3">
+              <div className="bg-gradient-to-br from-primary-light to-primary rounded-xl h-64 mb-5 flex flex-col items-center justify-center gap-3 relative overflow-hidden">
                 <div className="w-24 h-24 rounded-full bg-white/10 border-2 border-white/30 flex items-center justify-center">
                   <Users size={36} className="text-white/60" />
                 </div>
+                <a
+                  href="https://www.linkedin.com/in/sangeetha-salem-viswanathan-a87280212/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute top-4 right-4 w-9 h-9 bg-white/10 hover:bg-[#0077b5] rounded-lg flex items-center justify-center transition-colors"
+                  title="View LinkedIn Profile"
+                >
+                  <Linkedin size={16} className="text-white" />
+                </a>
               </div>
-              <h3 className="text-lg font-semibold text-primary group-hover:text-accent transition-colors">Operations Head</h3>
+              <h3 className="text-lg font-semibold text-primary group-hover:text-accent transition-colors">Sangeetha Salem Viswanathan</h3>
               <div className="text-accent text-sm font-semibold mb-2">Chief Operating Officer (COO)</div>
               <p className="text-gray-500 text-sm leading-relaxed">
                 Driving operational excellence, delivery governance, and process innovation across SRS Infoway's global delivery centers and client engagements.
               </p>
+              <a
+                href="https://www.linkedin.com/in/sangeetha-salem-viswanathan-a87280212/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[#0077b5] hover:underline"
+              >
+                <Linkedin size={14} /> Connect on LinkedIn
+              </a>
             </div>
           </div>
         </div>

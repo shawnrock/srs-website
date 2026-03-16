@@ -117,11 +117,11 @@ export default function TransformHubPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { number: "01", domain: "Cloud & Infrastructure", outcomes: "Cost reduction, scalability, resilience", color: "border-teal text-teal" },
-              { number: "02", domain: "Data & Analytics", outcomes: "Faster decisions, revenue insights, predictive models", color: "border-blue-500 text-blue-500" },
+              { number: "02", domain: "Data & Analytics", outcomes: "Faster decisions, revenue insights, predictive models", color: "border-primary text-primary" },
               { number: "03", domain: "Process & Automation", outcomes: "Efficiency gains, error reduction, speed-to-market", color: "border-accent text-accent" },
               { number: "04", domain: "AI & Intelligent Systems", outcomes: "Competitive differentiation, cost savings, innovation", color: "border-gold text-gold" },
-              { number: "05", domain: "Security & Compliance", outcomes: "Risk mitigation, regulatory readiness, trust", color: "border-green-500 text-green-500" },
-              { number: "06", domain: "Culture & Talent", outcomes: "Change adoption, capability building, retention", color: "border-purple-500 text-purple-500" },
+              { number: "05", domain: "Security & Compliance", outcomes: "Risk mitigation, regulatory readiness, trust", color: "border-teal-dark text-teal-dark" },
+              { number: "06", domain: "Culture & Talent", outcomes: "Change adoption, capability building, retention", color: "border-primary-light text-primary-light" },
             ].map((d, i) => (
               <div key={i} className={`bg-white rounded-xl p-7 border-l-4 ${d.color.split(" ")[0]} shadow-sm`}>
                 <div className={`text-3xl font-bold mb-2 ${d.color.split(" ")[1]}`}>{d.number}</div>

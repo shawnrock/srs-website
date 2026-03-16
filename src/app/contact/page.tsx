@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { MapPin, Phone, Mail, CheckCircle, Send } from "lucide-react";
 
 export default function ContactPage() {
@@ -131,9 +132,9 @@ export default function ContactPage() {
           <div className="text-center">
             <h3 className="text-2xl font-semibold text-primary mb-8">Trusted by 5,000+ enterprises across 40+ countries</h3>
             <div className="flex flex-wrap justify-center gap-8">
-              <a href="/services" className="text-accent font-semibold hover:underline">Explore Services</a>
-              <a href="/case-studies" className="text-accent font-semibold hover:underline">View Case Studies</a>
-              <a href="/careers" className="text-accent font-semibold hover:underline">Find Opportunities</a>
+              <Link href="/services" className="text-accent font-semibold hover:underline">Explore Services</Link>
+              <Link href="/case-studies" className="text-accent font-semibold hover:underline">View Case Studies</Link>
+              <Link href="/careers" className="text-accent font-semibold hover:underline">Find Opportunities</Link>
             </div>
           </div>
         </div>

@@ -3,6 +3,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Shield, Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 
+// Test accounts — replace with a real auth provider in production
+const USERS: Record<string, { password: string; name: string; role: string }> = {
+  "project.developers@srsinfoway.com": { password: "SRS@Dev2026",  name: "Dev Team",      role: "Admin"     },
+  "priya.m@srsinfoway.com":            { password: "SRS@Priya2026", name: "Priya M",       role: "Recruiter" },
+  "dhivyapriya@srsinfoway.com":        { password: "SRS@Dhivya2026",name: "Dhivya Priya",  role: "Recruiter" },
+  "admin@srsinfoway.com":              { password: "SRS@Admin2026", name: "SRS Admin",     role: "Admin"     },
+};
+
 export default function AIInterviewLoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -11,15 +19,17 @@ export default function AIInterviewLoginPage() {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const email = (form.elements.namedItem("email") as HTMLInputElement).value;
+    const email = (form.elements.namedItem("email") as HTMLInputElement).value.trim().toLowerCase();
     const password = (form.elements.namedItem("password") as HTMLInputElement).value;
 
-    // Simple demo auth - in production connect to real auth
-    if (email && password) {
-      localStorage.setItem("ai_interview_auth", JSON.stringify({ email, loggedIn: true }));
+    const user = USERS[email];
+    if (user && user.password === password) {
+      localStorage.setItem("ai_interview_auth", JSON.stringify({ email, name: user.name, role: user.role, loggedIn: true }));
       router.push("/ai-interview/admin");
+    } else if (!email || !password) {
+      setError("Please enter your email and password.");
     } else {
-      setError("Please enter email and password.");
+      setError("Invalid email or password. Please try again.");
     }
   };
 
@@ -71,6 +81,26 @@ export default function AIInterviewLoginPage() {
           <p className="mt-6 text-xs text-gray-400 text-center">
             Protected by enterprise-grade security. Authorized personnel only.
           </p>
+
+          {/* Test credentials panel — remove before go-live */}
+          <details className="mt-6 border border-dashed border-gray-200 rounded-lg">
+            <summary className="px-4 py-2 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600">
+              🔑 Test Credentials (dev only)
+            </summary>
+            <div className="px-4 pb-4 pt-2 space-y-2">
+              {[
+                { email: "project.developers@srsinfoway.com", password: "SRS@Dev2026",   role: "Admin"     },
+                { email: "priya.m@srsinfoway.com",            password: "SRS@Priya2026", role: "Recruiter" },
+                { email: "dhivyapriya@srsinfoway.com",        password: "SRS@Dhivya2026",role: "Recruiter" },
+                { email: "admin@srsinfoway.com",              password: "SRS@Admin2026", role: "Admin"     },
+              ].map((u) => (
+                <div key={u.email} className="text-xs font-mono bg-gray-50 rounded p-2 border border-gray-100">
+                  <div className="text-gray-700">{u.email}</div>
+                  <div className="text-gray-500">pw: {u.password} <span className="ml-2 text-accent font-sans font-semibold">[{u.role}]</span></div>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
       </div>
     </section>

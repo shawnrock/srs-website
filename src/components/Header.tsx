@@ -228,7 +228,6 @@ export default function Header() {
               <Link href="/blog" onClick={() => setMobileOpen(false)} className="py-4 text-primary font-semibold border-b border-gray-100">Insights</Link>
               <Link href="/careers" onClick={() => setMobileOpen(false)} className="py-4 text-primary font-semibold border-b border-gray-100">Careers</Link>
               <Link href="/about" onClick={() => setMobileOpen(false)} className="py-4 text-primary font-semibold border-b border-gray-100">Who We Are</Link>
-              <Link href="/ai-interview" onClick={() => setMobileOpen(false)} className="py-4 text-primary font-semibold border-b border-gray-100">AI Interview</Link>
               <Link href="/consultant-login" onClick={() => setMobileOpen(false)} className="py-4 text-primary font-semibold border-b border-gray-100">Consultant Login</Link>
               <Link href="/contact" onClick={() => setMobileOpen(false)} className="mt-4 px-6 py-3 bg-accent text-white font-semibold rounded text-center">Contact Us</Link>
             </div>

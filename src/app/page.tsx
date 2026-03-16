@@ -1,7 +1,30 @@
 "use client";
 import Link from "next/link";
-import { ArrowRight, Users, BarChart3, Building2, Heart, Factory, Wifi, Shield, Car, Brain, Globe, MapPin, RefreshCw, GitBranch, Headphones, Video, Cloud, Zap, Activity, ExternalLink } from "lucide-react";
+import { ArrowRight, Users, BarChart3, Building2, Heart, Factory, Wifi, Shield, Car, Brain, Globe, MapPin, RefreshCw, GitBranch, Headphones, Video, Cloud, Zap, Activity } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
+
+function ClientLogoCard({ name, abbr, color, logo }: { name: string; abbr: string; color: string; logo?: string }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  return (
+    <div className="inline-flex items-center justify-center mx-8 bg-white rounded-2xl px-10 py-6 shadow-sm border border-gray-100 h-24 w-48 shrink-0">
+      {logo && !imgFailed ? (
+        <img
+          src={logo}
+          alt={`${name} logo`}
+          className="max-w-full max-h-12 object-contain"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <div
+          className="w-16 h-12 rounded-lg flex items-center justify-center text-white font-bold text-sm tracking-wide"
+          style={{ backgroundColor: color }}
+        >
+          {abbr}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: string }) {
   const [count, setCount] = useState(0);
@@ -180,10 +203,10 @@ export default function HomePage() {
     <>
       {/* ===== HERO SECTION ===== */}
       <section className="bg-white">
-        <div className="max-w-7xl mx-auto px-8 pt-20 pb-24 lg:pt-28 lg:pb-32">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
+        <div className="max-w-7xl mx-auto px-8 pt-14 pb-16 lg:pt-20 lg:pb-24">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-light text-primary leading-[1.1] tracking-tight">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-light text-primary leading-[1.1] tracking-tight">
                 Powering the Next<br />
                 Wave of<br />
                 <span className="font-semibold">Enterprise Innovation</span>
@@ -213,6 +236,37 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== CLIENTS MARQUEE ===== */}
+      <section className="bg-surface border-y border-gray-200 overflow-hidden">
+        <div className="py-6 px-8 text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-6">Trusted by Industry Leaders</p>
+        </div>
+        <div className="overflow-hidden pb-8">
+          <div className="animate-marquee">
+            {([
+              { name: "Infosys",       abbr: "INFY", color: "#007CC3", logo: "/logos/infosys.png" },
+              { name: "TCS",           abbr: "TCS",  color: "#E0111F", logo: "/logos/tcs.png" },
+              { name: "HCL Tech",      abbr: "HCL",  color: "#0076C0", logo: "/logos/hcltech.png" },
+              { name: "LTIMindtree",   abbr: "LTI",  color: "#6DBE45", logo: "/logos/ltimindtree.png" },
+              { name: "Mphasis",       abbr: "MPH",  color: "#E2232A", logo: "/logos/mphasis.png" },
+              { name: "Olam Group",    abbr: "OLM",  color: "#78BE20", logo: "/logos/olam.png" },
+              { name: "L&T",           abbr: "L&T",  color: "#003F87", logo: "/logos/lt.png" },
+              { name: "Tech Mahindra", abbr: "TM",   color: "#E31837", logo: "/logos/techmahindra.png" },
+              { name: "Infosys",       abbr: "INFY", color: "#007CC3", logo: "/logos/infosys.png" },
+              { name: "TCS",           abbr: "TCS",  color: "#E0111F", logo: "/logos/tcs.png" },
+              { name: "HCL Tech",      abbr: "HCL",  color: "#0076C0", logo: "/logos/hcltech.png" },
+              { name: "LTIMindtree",   abbr: "LTI",  color: "#6DBE45", logo: "/logos/ltimindtree.png" },
+              { name: "Mphasis",       abbr: "MPH",  color: "#E2232A", logo: "/logos/mphasis.png" },
+              { name: "Olam Group",    abbr: "OLM",  color: "#78BE20", logo: "/logos/olam.png" },
+              { name: "L&T",           abbr: "L&T",  color: "#003F87", logo: "/logos/lt.png" },
+              { name: "Tech Mahindra", abbr: "TM",   color: "#E31837", logo: "/logos/techmahindra.png" },
+            ] as { name: string; abbr: string; color: string; logo?: string }[]).map((client, i) => (
+              <ClientLogoCard key={i} {...client} />
+            ))}
           </div>
         </div>
       </section>
@@ -271,7 +325,7 @@ export default function HomePage() {
             <div className="text-accent text-sm font-semibold uppercase tracking-widest mb-4">Built In-House. Deployed Globally.</div>
             <h2 className="text-4xl font-light text-primary mb-4">Our Products</h2>
             <p className="text-gray-500 max-w-2xl mx-auto leading-relaxed">
-              Proprietary platforms engineered by SRS Infoway to automate hiring, optimise cloud costs, accelerate transformation, and give your teams real-time operational intelligence.
+              Proprietary platforms engineered by SRS Infoway to automate hiring, optimize cloud costs, accelerate transformation, and give your teams real-time operational intelligence.
             </p>
           </div>
 
