@@ -109,3 +109,35 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+// POST /api/interviews/[id]/report — manually (re)send report email
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const session = await sessionManager.getSession(id);
+  if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+  if (!session.report) return NextResponse.json({ error: 'Report not generated yet' }, { status: 400 });
+
+  const body = await req.json().catch(() => ({}));
+  const toEmail: string = body.email || session.recruiterEmail;
+  const toName: string = body.name || session.recruiterName;
+
+  if (!toEmail) return NextResponse.json({ error: 'No email address provided' }, { status: 400 });
+
+  try {
+    await sendInterviewReport({
+      recruiterEmail: toEmail,
+      recruiterName: toName,
+      report: session.report,
+      session: {
+        id: session.id,
+        candidateName: session.candidate?.name,
+        position: session.jd?.title,
+        client: session.jd?.client,
+        observerUrl: session.observerUrl,
+      },
+    });
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

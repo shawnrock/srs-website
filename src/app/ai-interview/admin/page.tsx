@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, RefreshCw, ExternalLink, Users, Clock, CheckCircle, Circle, AlertCircle, LogOut, Copy, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, ExternalLink, Users, Clock, CheckCircle, Circle, AlertCircle, LogOut, Copy, Trash2, Mail } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   scheduled: { label: "Scheduled", color: "#a16207", bg: "#fef9c3" },
@@ -28,6 +28,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [emailingId, setEmailingId] = useState<string | null>(null);
+  const [emailedId, setEmailedId] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -43,6 +45,28 @@ export default function AdminDashboard() {
     navigator.clipboard.writeText(link);
     setCopiedId(sessionId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const emailReport = async (sessionId: string) => {
+    const email = prompt("Send report to email address:");
+    if (!email) return;
+    setEmailingId(sessionId);
+    try {
+      const res = await fetch(`/api/interviews/${sessionId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        setEmailedId(sessionId);
+        setTimeout(() => setEmailedId(null), 3000);
+      } else {
+        const d = await res.json();
+        alert(d.error || "Failed to send email");
+      }
+    } finally {
+      setEmailingId(null);
+    }
   };
 
   const deleteSession = async (sessionId: string) => {
@@ -161,10 +185,19 @@ export default function AdminDashboard() {
                         <ExternalLink size={12} /> Interviewer
                       </Link>
                       {s.status === "completed" && (
-                        <Link href={`/ai-interview/report/${s.id}`}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-teal text-white text-xs font-semibold rounded-lg hover:bg-teal-dark transition-colors">
-                          Report
-                        </Link>
+                        <>
+                          <Link href={`/ai-interview/report/${s.id}`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal text-white text-xs font-semibold rounded-lg hover:bg-teal-dark transition-colors">
+                            Report
+                          </Link>
+                          <button onClick={() => emailReport(s.id)}
+                            disabled={emailingId === s.id}
+                            title="Email report PDF to recruiter"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                            <Mail size={12} />
+                            {emailingId === s.id ? "Sending…" : emailedId === s.id ? "Sent!" : "Email"}
+                          </button>
+                        </>
                       )}
                       {s.status !== "in_progress" && (
                         <button onClick={() => deleteSession(s.id)}
