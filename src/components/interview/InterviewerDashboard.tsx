@@ -135,6 +135,8 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
   const [camPermission, setCamPermission] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
   const camStreamRef = useRef<MediaStream | null>(null);
 
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const reportFetchedRef = useRef(false);
@@ -292,8 +294,8 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
   }, [sessionId]);
 
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [liveTranscript, answerTranscripts]);
+    if (transcriptOpen) transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [liveTranscript, answerTranscripts, transcriptOpen]);
 
   useEffect(() => {
     if (!latestAlert) return;
@@ -771,24 +773,43 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
                 )}
               </div>
 
-              <Card style={{ marginBottom: 14, padding: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <SectionLabel>Live Candidate Transcript</SectionLabel>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, display: 'inline-block', animation: 'pulse 1.5s infinite', marginBottom: 8 }} />
-                </div>
-                <div style={{ maxHeight: 160, overflowY: 'auto' }}>
-                  {answerTranscripts[currentQuestion] ? (
-                    <p style={{ fontSize: 13, color: C.text, lineHeight: 1.7, margin: 0 }}>
-                      {answerTranscripts[currentQuestion]}
-                      {liveTranscript && <span style={{ color: C.textMuted, fontStyle: 'italic' }}> {liveTranscript}</span>}
-                    </p>
-                  ) : (
-                    <p style={{ fontSize: 13, color: C.textMuted, fontStyle: 'italic', margin: 0 }}>
-                      {liveTranscript || 'Waiting for candidate to speak…'}
-                    </p>
-                  )}
-                  <div ref={transcriptEndRef} />
-                </div>
+              <Card style={{ marginBottom: 14, padding: 0, overflow: 'hidden' }}>
+                <button
+                  onClick={() => setTranscriptOpen(o => !o)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer',
+                    borderBottom: transcriptOpen ? `1px solid ${C.border}` : 'none',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: C.textMid }}>
+                      Live Candidate Transcript
+                    </span>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, display: 'inline-block', animation: 'pulse 1.5s infinite' }} />
+                    {!transcriptOpen && (answerTranscripts[currentQuestion] || liveTranscript) && (
+                      <span style={{ fontSize: 11, color: C.textMuted, fontStyle: 'italic', maxWidth: 200, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                        — {liveTranscript || answerTranscripts[currentQuestion]}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: 16, color: C.textMuted, transform: transcriptOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
+                </button>
+                {transcriptOpen && (
+                  <div style={{ padding: '12px 16px', maxHeight: 160, overflowY: 'auto' }}>
+                    {answerTranscripts[currentQuestion] ? (
+                      <p style={{ fontSize: 13, color: C.text, lineHeight: 1.7, margin: 0 }}>
+                        {answerTranscripts[currentQuestion]}
+                        {liveTranscript && <span style={{ color: C.textMuted, fontStyle: 'italic' }}> {liveTranscript}</span>}
+                      </p>
+                    ) : (
+                      <p style={{ fontSize: 13, color: C.textMuted, fontStyle: 'italic', margin: 0 }}>
+                        {liveTranscript || 'Waiting for candidate to speak…'}
+                      </p>
+                    )}
+                    <div ref={transcriptEndRef} />
+                  </div>
+                )}
               </Card>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
