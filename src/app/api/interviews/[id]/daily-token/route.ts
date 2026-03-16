@@ -7,7 +7,7 @@ async function createDailyRoom(): Promise<{ name: string; url: string }> {
   const res = await fetch('https://api.daily.co/v1/rooms', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ properties: { exp: Math.floor(Date.now() / 1000) + 3600, enable_recording: 'cloud' } }),
+    body: JSON.stringify({ properties: { exp: Math.floor(Date.now() / 1000) + 28800, enable_recording: 'cloud' } }),
   });
   if (!res.ok) throw new Error('Failed to create Daily room');
   const data = await res.json();
@@ -24,7 +24,7 @@ async function createDailyToken(roomName: string, role: string): Promise<string>
       properties: {
         room_name: roomName,
         is_owner: role === 'observer' || role === 'interviewer',
-        exp: Math.floor(Date.now() / 1000) + 3600,
+        exp: Math.floor(Date.now() / 1000) + 28800,
       },
     }),
   });
@@ -43,11 +43,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const role = req.nextUrl.searchParams.get('role') || 'candidate';
 
   try {
-    // Create room if not exists
+    // Create room if not exists, or if existing room is expired/invalid
     if (!session.dailyRoomName) {
       const room = await createDailyRoom();
       await sessionManager.updateSession(id, { dailyRoomName: room.name, dailyRoomUrl: room.url });
       session = await sessionManager.getSession(id) || session;
+    } else {
+      // Verify room still exists
+      const apiKey = process.env.DAILY_API_KEY!;
+      const check = await fetch(`https://api.daily.co/v1/rooms/${session.dailyRoomName}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!check.ok) {
+        // Room expired or deleted — create a fresh one
+        const room = await createDailyRoom();
+        await sessionManager.updateSession(id, { dailyRoomName: room.name, dailyRoomUrl: room.url });
+        session = await sessionManager.getSession(id) || session;
+      }
     }
 
     const token = await createDailyToken(session.dailyRoomName!, role);
