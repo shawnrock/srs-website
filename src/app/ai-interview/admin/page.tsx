@@ -158,7 +158,7 @@ export default function AdminDashboard() {
                       </button>
                       <Link href={`/ai-interview/interview/${s.id}`}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-light transition-colors">
-                        <ExternalLink size={12} /> Interview
+                        <ExternalLink size={12} /> Interviewer
                       </Link>
                       {s.status === "completed" && (
                         <Link href={`/ai-interview/report/${s.id}`}
