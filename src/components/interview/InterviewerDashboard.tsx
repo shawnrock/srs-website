@@ -136,6 +136,9 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
   const camStreamRef = useRef<MediaStream | null>(null);
 
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [participantCount, setParticipantCount] = useState(0);
+  const [extraParticipants, setExtraParticipants] = useState<{ id: string; name: string }[]>([]);
+  const [multiPersonDismissed, setMultiPersonDismissed] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
@@ -230,12 +233,52 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
           }
         }
         if (data.answerTranscripts) setAnswerTranscripts(data.answerTranscripts);
-        if (data.proctorAlerts) setProctorAlerts(data.proctorAlerts);
         if (data.currentQuestion !== undefined) setCurrentQuestion(data.currentQuestion);
+        if (data.proctorAlerts) {
+          setProctorAlerts(data.proctorAlerts);
+          // Derive face status from recent alerts (REST fallback when WS unavailable)
+          const now = Date.now();
+          const recent = (data.proctorAlerts as any[]).filter((a: any) => now - a.timestamp < 20000);
+          const hasMultiFace = recent.some((a: any) => a.check === 'Multiple People');
+          const hasNoFace = recent.some((a: any) =>
+            a.check === 'Camera Off / No Face' || a.check === 'Looking Down / Face Left Frame'
+          );
+          const hasLookAway = recent.some((a: any) => a.check === 'Looking Away');
+          setFaceStatus({
+            detected: !hasNoFace,
+            eyeContact: !hasLookAway && !hasNoFace,
+            faceCount: hasMultiFace ? 2 : hasNoFace ? 0 : 1,
+            gazeDirection: null,
+          });
+        }
       } catch (_) {}
     }, 4000);
 
-    return () => { stopped = true; clearInterval(poll); };
+    // Poll Daily.co participant count every 6 s during active interview
+    const participantPoll = setInterval(async () => {
+      if (stopped) return;
+      try {
+        const r = await fetch(`/api/interviews/${sessionId}/participants`);
+        const data = await r.json();
+        if (stopped) return;
+        const count: number = data.count || 0;
+        const participants: { id: string; name: string }[] = data.participants || [];
+        setParticipantCount(count);
+        // Flag participants beyond the expected candidate + interviewer (2)
+        if (count > 2) {
+          // Find names that are not the interviewer (owner role)
+          const extras = participants.filter((p) =>
+            p.name?.toLowerCase() !== 'interviewer' && p.name?.toLowerCase() !== 'srs infoway'
+          );
+          setExtraParticipants(extras.slice(0, 5));
+          setMultiPersonDismissed(false); // re-show banner whenever a new person joins
+        } else {
+          setExtraParticipants([]);
+        }
+      } catch (_) {}
+    }, 6000);
+
+    return () => { stopped = true; clearInterval(poll); clearInterval(participantPoll); };
   }, [sessionId]);
 
   useEffect(() => {
@@ -556,6 +599,65 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
         </div>
       )}
 
+      {/* ── Multi-Person Warning Banner ── */}
+      {(faceStatus.faceCount > 1 || extraParticipants.length > 0) && !multiPersonDismissed && (
+        <div style={{
+          position: 'fixed', top: latestAlert ? 90 : 16, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9998, minWidth: 360, maxWidth: 560,
+          background: '#fff', border: `2px solid ${C.red}`,
+          borderRadius: 12, padding: '0',
+          boxShadow: '0 8px 32px rgba(220,38,38,0.25)',
+          animation: 'slideDown 0.3s ease', overflow: 'hidden',
+        }}>
+          {/* Red header bar */}
+          <div style={{
+            background: C.red, padding: '10px 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 20 }}>🚨</span>
+              <span style={{ color: '#fff', fontWeight: 800, fontSize: 14, letterSpacing: 0.3 }}>
+                MULTIPLE PEOPLE DETECTED
+              </span>
+            </div>
+            <button onClick={() => setMultiPersonDismissed(true)}
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
+          </div>
+          {/* Body */}
+          <div style={{ padding: '12px 16px' }}>
+            {faceStatus.faceCount > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: extraParticipants.length > 0 ? 8 : 0 }}>
+                <span style={{ fontSize: 14 }}>📷</span>
+                <span style={{ fontSize: 13, color: C.text }}>
+                  <strong>{faceStatus.faceCount} people</strong> detected in the candidate's camera feed.
+                </span>
+              </div>
+            )}
+            {extraParticipants.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <span style={{ fontSize: 14 }}>📞</span>
+                <div>
+                  <span style={{ fontSize: 13, color: C.text }}>
+                    <strong>{extraParticipants.length} additional participant{extraParticipants.length > 1 ? 's' : ''}</strong> joined the video call:
+                  </span>
+                  <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {extraParticipants.map((p, i) => (
+                      <span key={i} style={{
+                        background: C.redLight, border: `1px solid #fecaca`, borderRadius: 6,
+                        padding: '2px 10px', fontSize: 12, fontWeight: 600, color: C.red
+                      }}>{p.name}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: 10, fontSize: 11, color: C.textMuted, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+              This incident has been logged automatically. Ask the additional person to leave before continuing.
+            </div>
+          </div>
+        </div>
+      )}
+
       <header style={{
         background: C.surface, borderBottom: `1px solid ${C.border}`,
         padding: '0 24px', height: 54,
@@ -867,7 +969,14 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
             {[
               { label: 'Face Detected', ok: faceStatus.detected },
               { label: 'Eye Contact', ok: faceStatus.eyeContact },
-              { label: 'Single Person', ok: faceStatus.faceCount <= 1 },
+              {
+                label: faceStatus.faceCount > 1
+                  ? `⚠ ${faceStatus.faceCount} People in Camera`
+                  : extraParticipants.length > 0
+                    ? `⚠ ${extraParticipants.length + 1} in Call`
+                    : 'Single Person',
+                ok: faceStatus.faceCount <= 1 && extraParticipants.length === 0,
+              },
               { label: 'Video Call', ok: !!dailyUrl },
             ].map((c, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none' }}>
