@@ -5,6 +5,7 @@ import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 const STATES = {
   LOADING: 'loading',
   SETUP: 'setup',
+  RECONNECTING: 'reconnecting', // interview is live, candidate lost connection
   READY: 'ready',
   INTERVIEW: 'interview',
   COMPLETE: 'complete',
@@ -25,6 +26,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
   const [videoConnected, setVideoConnected] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [dailyUrl, setDailyUrl] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false); // true during rejoin media setup
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -162,18 +164,34 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         if (data.error) throw new Error(data.error);
         setSession(data);
         setTotalQuestions(data.totalQuestions || 5);
+
+        // Interview already completed — go straight to done screen
+        if (data.status === 'completed') {
+          setState(STATES.COMPLETE);
+          return;
+        }
+
+        // Interview is live — candidate is reconnecting after a disconnect
+        if (data.status === 'in_progress') {
+          setCurrentQuestion(data.currentQuestion ?? 0);
+          currentQuestionRef.current = data.currentQuestion ?? 0;
+          setState(STATES.RECONNECTING);
+          return; // Don't overwrite in_progress with 'waiting'
+        }
+
+        // Normal first-join flow
         setState(STATES.SETUP);
-        // Notify observer that candidate has arrived (REST fallback for Vercel)
+        // Notify interviewer that candidate has arrived
         fetch(`/api/interviews/${sessionId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'waiting' }),
         }).catch(() => {});
       })
-      .catch(err => { setError('Interview session not found or has expired. Please contact your recruiter for a new link.'); setState(STATES.ERROR); });
+      .catch(() => { setError('Interview session not found or has expired. Please contact your recruiter for a new link.'); setState(STATES.ERROR); });
   }, [sessionId]);
 
-  const setupMedia = useCallback(async () => {
+  const setupMedia = useCallback(async (isRejoin = false) => {
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         setError('Camera access is blocked. This page must be served over HTTPS or localhost.');
@@ -195,7 +213,15 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         setState(STATES.ERROR);
         return;
       }
-      setState(STATES.READY);
+
+      if (isRejoin) {
+        // Skip the waiting screen — go straight back into the interview
+        isInterviewActiveRef.current = true;
+        setState(STATES.INTERVIEW);
+        startDeepgramSTTRef.current();
+      } else {
+        setState(STATES.READY);
+      }
     } catch (err: any) {
       setError(`Camera/microphone access failed: ${err.message}`);
       setState(STATES.ERROR);
@@ -494,9 +520,49 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
             <div style={{ fontSize: 48, marginBottom: 16 }}>🎥</div>
             <h2 style={{ marginBottom: 8, color: '#0a2540' }}>Camera &amp; Microphone Setup</h2>
             <p style={{ color: '#64748b', marginBottom: 24, fontSize: 14 }}>Allow camera and microphone access to join your video interview.</p>
-            <button onClick={setupMedia} style={{ padding: '12px 32px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #0a2540, #e8542f)', color: 'white', fontWeight: 'bold', fontSize: 16, cursor: 'pointer' }}>
+            <button onClick={() => setupMedia(false)} style={{ padding: '12px 32px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #0a2540, #e8542f)', color: 'white', fontWeight: 'bold', fontSize: 16, cursor: 'pointer' }}>
               Grant Camera &amp; Mic Access
             </button>
+          </div>
+        )}
+        {state === STATES.RECONNECTING && (
+          <div style={{ textAlign: 'center', maxWidth: 500, background: '#fff', borderRadius: 16, padding: 40, border: '2px solid #fbbf24', boxShadow: '0 4px 24px rgba(0,0,0,0.1)' }}>
+            {/* Pulsing signal icon */}
+            <div style={{ fontSize: 56, marginBottom: 16, animation: 'pulse 1.5s infinite' }}>📡</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 14px', borderRadius: 999, background: '#fef3c7', border: '1px solid #fbbf24', marginBottom: 16 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1s infinite' }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: 1 }}>Interview In Progress</span>
+            </div>
+            <h2 style={{ marginBottom: 8, color: '#0a2540', fontSize: 22 }}>You Were Disconnected</h2>
+            <p style={{ color: '#64748b', marginBottom: 6, fontSize: 14, lineHeight: 1.6 }}>
+              Don't worry — your progress is saved. The interviewer is still waiting for you.
+            </p>
+            <div style={{ background: '#f1f5f9', borderRadius: 10, padding: '12px 16px', margin: '16px 0', textAlign: 'left' }}>
+              <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Resuming at</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#0a2540' }}>
+                Question {(currentQuestion ?? 0) + 1} of {totalQuestions}
+              </div>
+              <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
+                {session?.position} {session?.client ? `· ${session.client}` : ''}
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                setReconnecting(true);
+                await setupMedia(true);
+                setReconnecting(false);
+              }}
+              disabled={reconnecting}
+              style={{ width: '100%', padding: '14px 32px', borderRadius: 10, border: 'none', background: reconnecting ? '#94a3b8' : 'linear-gradient(135deg, #0a2540, #e8542f)', color: 'white', fontWeight: 'bold', fontSize: 16, cursor: reconnecting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, transition: 'opacity 0.2s' }}>
+              {reconnecting ? (
+                <><span style={{ display: 'inline-block', width: 18, height: 18, border: '2.5px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />Reconnecting...</>
+              ) : (
+                <>🔄 Rejoin Interview Now</>
+              )}
+            </button>
+            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 12 }}>
+              Your previous answers and transcript have been saved.
+            </p>
           </div>
         )}
         {state === STATES.READY && (
@@ -543,7 +609,10 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       </main>
 
       <video ref={videoRef} autoPlay muted playsInline style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1 }} />
-      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
+      <style>{`
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }

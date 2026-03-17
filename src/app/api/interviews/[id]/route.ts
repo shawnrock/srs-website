@@ -65,8 +65,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ success: true });
   }
 
-  // Generic status update
+  // Generic status update — never allow downgrading an active or completed session
   if (body.status) {
+    const protectedStatuses = ['in_progress', 'completed'];
+    if (protectedStatuses.includes(session.status) && !protectedStatuses.includes(body.status)) {
+      // Silently ignore attempts to set 'waiting' or 'scheduled' on an active session
+      return NextResponse.json({ success: true });
+    }
     await sessionManager.updateSession(id, { status: body.status });
     return NextResponse.json({ success: true });
   }
