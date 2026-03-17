@@ -92,6 +92,46 @@ Generate a comprehensive evaluation report. Return ONLY valid JSON with this str
     return JSON.parse(text);
   }
 
+  async checkJDResumeCompatibility(
+    jd: { title: string; description: string; client: string },
+    resume: string
+  ): Promise<{ compatible: boolean; matchScore: number; reason: string; mismatches: string[] }> {
+    const prompt = `You are a senior recruiter. Compare this job description with this candidate resume and assess how well they match.
+
+Job Title: ${jd.title}
+Client: ${jd.client}
+Job Description:
+${jd.description}
+
+Candidate Resume:
+${resume || '(no resume provided)'}
+
+Assess the compatibility. A score below 25 means the resume is completely unrelated to the role (e.g. a chef applying for a software engineer role). A score of 25-50 means partial match. Above 50 means reasonable or strong match.
+
+Return ONLY valid JSON:
+{
+  "matchScore": 0-100,
+  "compatible": true or false (false if matchScore < 25),
+  "reason": "1-2 sentence explanation of why the resume does or does not match the JD",
+  "mismatches": ["specific mismatch 1", "specific mismatch 2"]
+}`;
+
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.5-pro',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { responseMimeType: 'application/json' },
+    });
+
+    const text = response.text ?? '{}';
+    const result = JSON.parse(text);
+    return {
+      compatible: result.matchScore >= 25,
+      matchScore: result.matchScore ?? 0,
+      reason: result.reason ?? 'Could not assess compatibility.',
+      mismatches: result.mismatches ?? [],
+    };
+  }
+
   async analyzeResumeProfile(candidate: { name: string; resume: string }): Promise<any> {
     const prompt = `Analyze this resume/profile for ${candidate.name}:
 
