@@ -64,7 +64,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
     if (faceCount > 1) {
       const key = 'multi_face';
       if (!gaze.lastAlert[key] || now - gaze.lastAlert[key] > 15000) {
-        sendAlert('Multiple People', 'high', `${faceCount} faces detected — possible assistance at ${new Date().toLocaleTimeString()}`);
+        sendAlert('Multiple People', 'high', `${faceCount} faces detected in the camera frame — possible coaching or outside assistance.`);
         gaze.lastAlert[key] = now;
       }
     }
@@ -74,9 +74,9 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       if (!gaze.lastAlert[key] || now - gaze.lastAlert[key] > 8000) {
         const vanishedRecently = gaze.lastFaceSeen && (now - gaze.lastFaceSeen) < 6000;
         if (vanishedRecently) {
-          sendAlert('Looking Down / Face Left Frame', 'high', `Candidate's face left camera view at ${new Date().toLocaleTimeString()}`);
+          sendAlert('Face Left Frame', 'high', `Candidate's face moved out of camera view — may be looking down at notes or a phone.`);
         } else {
-          sendAlert('Camera Off / No Face', 'high', `Face not detected at ${new Date().toLocaleTimeString()}`);
+          sendAlert('No Face Detected', 'high', `No face visible in camera — candidate may have stepped away or the camera is blocked.`);
         }
         gaze.lastAlert[key] = now;
       }
@@ -117,7 +117,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       else if (now - gaze.lookDownStart > 2500) {
         const key = 'look_down';
         if (!gaze.lastAlert[key] || now - gaze.lastAlert[key] > 12000) {
-          sendAlert('Looking Down', 'high', `Candidate looking down at ${new Date().toLocaleTimeString()}`);
+          sendAlert('Looking Down', 'high', `Candidate is looking downward — possibly reading from notes or using a mobile device.`);
           gaze.lastAlert[key] = now;
         }
       }
@@ -130,7 +130,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         const key = 'look_away';
         if (!gaze.lastAlert[key] || now - gaze.lastAlert[key] > 12000) {
           const dir = gazeX < 0.5 ? 'left' : 'right';
-          sendAlert('Looking Away', 'warning', `Candidate looking ${dir} at ${new Date().toLocaleTimeString()}`);
+          sendAlert('Looking Away', 'warning', `Candidate's eyes are drifting to the ${dir} — not focused on the interview screen.`);
           gaze.lastAlert[key] = now;
         }
       }
@@ -381,7 +381,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden && isInterviewActiveRef.current) {
-        sendAlert('Tab Switch', 'warning', `Tab switch detected at ${new Date().toLocaleTimeString()}`);
+        sendAlert('Tab Switch', 'warning', `Candidate switched to a different browser tab or application during the interview.`);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -412,7 +412,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       if (avgBrightness < 8) {
         blackFrameCount++;
         if (blackFrameCount >= 5 && now - lastBlackAlert > 10000) {
-          sendAlert('Camera Turned Off', 'high', `Camera feed is black at ${new Date().toLocaleTimeString()}`);
+          sendAlert('Camera Off', 'high', `Camera feed is completely dark — candidate may have turned off their camera or covered the lens.`);
           lastBlackAlert = now;
           blackFrameCount = 0;
         }

@@ -241,15 +241,28 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
           const recent = (data.proctorAlerts as any[]).filter((a: any) => now - a.timestamp < 20000);
           const hasMultiFace = recent.some((a: any) => a.check === 'Multiple People');
           const hasNoFace = recent.some((a: any) =>
-            a.check === 'Camera Off / No Face' || a.check === 'Looking Down / Face Left Frame'
+            // Current check names
+            a.check === 'No Face Detected' || a.check === 'Face Left Frame' || a.check === 'Camera Off' ||
+            // Legacy check names (backward-compat)
+            a.check === 'Camera Off / No Face' || a.check === 'Looking Down / Face Left Frame' || a.check === 'Camera Turned Off'
           );
+          const hasLookDown = recent.some((a: any) => a.check === 'Looking Down');
           const hasLookAway = recent.some((a: any) => a.check === 'Looking Away');
           setFaceStatus({
             detected: !hasNoFace,
-            eyeContact: !hasLookAway && !hasNoFace,
+            eyeContact: !hasLookAway && !hasLookDown && !hasNoFace,
             faceCount: hasMultiFace ? 2 : hasNoFace ? 0 : 1,
-            gazeDirection: null,
+            gazeDirection: hasLookDown ? 'down' : hasLookAway ? 'away' : null,
           });
+          // Show toast for most recent alert that arrived in last 8 s (REST fallback)
+          const veryRecent = (data.proctorAlerts as any[]).filter((a: any) => now - a.timestamp < 8000);
+          if (veryRecent.length > 0) {
+            const newest = veryRecent[veryRecent.length - 1];
+            setLatestAlert((prev: any) => {
+              if (prev && prev.timestamp === newest.timestamp) return prev; // same alert, no change
+              return newest;
+            });
+          }
         }
       } catch (_) {}
     }, 4000);
@@ -521,16 +534,32 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
                 const bg = isHigh ? '#fff5f5' : isInfo ? '#eff6ff' : '#fffbeb';
                 const border = isHigh ? '#fecaca' : isInfo ? '#bfdbfe' : '#fde68a';
                 const color = isHigh ? C.red : isInfo ? '#2563eb' : C.amber;
-                const icon = isHigh ? '🚨' : isInfo ? '🎙️' : '⚠️';
+                const alertIconMap: Record<string, string> = {
+                  'Multiple People': '👥',
+                  'Face Left Frame': '🙈',
+                  'No Face Detected': '👤',
+                  'Looking Down': '👇',
+                  'Looking Away': '👀',
+                  'Camera Off': '📷',
+                  'Camera Turned Off': '📷',
+                  'Camera Off / No Face': '👤',
+                  'Looking Down / Face Left Frame': '🙈',
+                  'Tab Switch': '🔀',
+                };
+                const icon = alertIconMap[a.check] || (isHigh ? '🚨' : isInfo ? '🎙️' : '⚠️');
+                const ts = a.timestamp ? new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
                 return (
                   <div key={i} style={{
                     fontSize: 12, marginBottom: 6, display: 'flex', gap: 8, alignItems: 'flex-start',
                     padding: '8px 12px', borderRadius: 8, background: bg, border: `1px solid ${border}`
                   }}>
                     <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
-                    <div>
-                      <strong style={{ color }}>{a.check || a.type}</strong>
-                      <span style={{ color: C.textMid, marginLeft: 6 }}>{a.detail || a.message || 'Alert triggered'}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                        <strong style={{ color }}>{a.check || a.type}</strong>
+                        {ts && <span style={{ fontSize: 10, color: C.textMuted }}>{ts}</span>}
+                      </div>
+                      <span style={{ color: C.textMid }}>{a.detail || a.message || 'Alert triggered'}</span>
                     </div>
                   </div>
                 );
@@ -584,7 +613,14 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
             background: latestAlert.severity === 'high' ? C.redLight : latestAlert.severity === 'info' ? '#eff6ff' : C.amberLight
           }}>
-            {latestAlert.severity === 'high' ? '🚨' : latestAlert.severity === 'info' ? '🎙️' : '⚠️'}
+            {(() => {
+              const toastIconMap: Record<string, string> = {
+                'Multiple People': '👥', 'Face Left Frame': '🙈', 'No Face Detected': '👤',
+                'Looking Down': '👇', 'Looking Away': '👀', 'Camera Off': '📷',
+                'Camera Turned Off': '📷', 'Tab Switch': '🔀',
+              };
+              return toastIconMap[latestAlert.check] || (latestAlert.severity === 'high' ? '🚨' : latestAlert.severity === 'info' ? '🎙️' : '⚠️');
+            })()}
           </span>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: latestAlert.severity === 'high' ? C.red : latestAlert.severity === 'info' ? '#2563eb' : C.amber, marginBottom: 3 }}>
@@ -677,7 +713,7 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
           </Badge>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Dot ok={candidateConnected} />
             <span style={{ fontSize: 12, color: C.textMid, fontWeight: 500 }}>
@@ -692,6 +728,24 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
           }>
             {status.toUpperCase()}
           </Badge>
+
+          {/* ── Start Interview shortcut in header (visible before interview begins) ── */}
+          {candidateConnected && !interviewStarted && status !== 'completed' && (
+            <button
+              onClick={startInterview}
+              style={{
+                padding: '7px 18px', borderRadius: 8, border: 'none',
+                background: 'linear-gradient(135deg, #0a2540, #e8542f)',
+                color: '#fff', fontWeight: 700, fontSize: 13,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                boxShadow: '0 2px 10px rgba(10,37,64,0.3)',
+                animation: 'pulse-btn 2s ease-in-out infinite',
+              }}
+            >
+              ▶ Start Interview
+            </button>
+          )}
+
           <a href="/ai-interview/admin"
             style={{ fontSize: 12, color: C.textMid, textDecoration: 'none', fontWeight: 600 }}>
             ← Dashboard
@@ -967,17 +1021,25 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
           <SectionLabel>Proctoring Status</SectionLabel>
           <Card style={{ marginBottom: 14, padding: 12 }}>
             {[
-              { label: 'Face Detected', ok: faceStatus.detected },
-              { label: 'Eye Contact', ok: faceStatus.eyeContact },
+              {
+                label: !faceStatus.detected ? '👤 No Face in Camera' : '👤 Face Detected',
+                ok: faceStatus.detected,
+              },
+              {
+                label: !faceStatus.eyeContact
+                  ? (faceStatus.gazeDirection === 'down' ? '👇 Looking Down' : '👀 Looking Away')
+                  : '👁 Eyes on Screen',
+                ok: faceStatus.eyeContact,
+              },
               {
                 label: faceStatus.faceCount > 1
                   ? `⚠ ${faceStatus.faceCount} People in Camera`
                   : extraParticipants.length > 0
                     ? `⚠ ${extraParticipants.length + 1} in Call`
-                    : 'Single Person',
+                    : '✓ Single Person',
                 ok: faceStatus.faceCount <= 1 && extraParticipants.length === 0,
               },
-              { label: 'Video Call', ok: !!dailyUrl },
+              { label: dailyUrl ? '🎥 Video Live' : '🎥 Video Call', ok: !!dailyUrl },
             ].map((c, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: i < 3 ? `1px solid ${C.border}` : 'none' }}>
                 <Dot ok={c.ok} />
@@ -998,15 +1060,32 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
             <div style={{ marginBottom: 14, maxHeight: 200, overflowY: 'auto' }}>
               {[...proctorAlerts].reverse().map((a: any, i: number) => {
                 const isHigh = a.severity === 'high';
+                const sidebarIconMap: Record<string, string> = {
+                  'Multiple People': '👥',
+                  'Face Left Frame': '🙈',
+                  'No Face Detected': '👤',
+                  'Looking Down': '👇',
+                  'Looking Away': '👀',
+                  'Camera Off': '📷',
+                  'Camera Turned Off': '📷',
+                  'Camera Off / No Face': '👤',
+                  'Looking Down / Face Left Frame': '🙈',
+                  'Tab Switch': '🔀',
+                };
+                const icon = sidebarIconMap[a.check] || (isHigh ? '🚨' : '⚠️');
+                const ts = a.timestamp ? new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
                 return (
                   <div key={i} style={{
                     background: isHigh ? '#fff5f5' : '#fffbeb',
                     border: `1px solid ${isHigh ? '#fecaca' : '#fde68a'}`,
                     borderRadius: 8, padding: '7px 10px', marginBottom: 6, fontSize: 10
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                      <span>{isHigh ? '🚨' : '⚠️'}</span>
-                      <strong style={{ color: isHigh ? C.red : C.amber }}>{a.check || a.type || 'Alert'}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span>{icon}</span>
+                        <strong style={{ color: isHigh ? C.red : C.amber }}>{a.check || a.type || 'Alert'}</strong>
+                      </div>
+                      {ts && <span style={{ color: C.textMuted, fontSize: 9 }}>{ts}</span>}
                     </div>
                     <p style={{ color: C.textMid, margin: 0, lineHeight: 1.4 }}>{a.detail || a.message || ''}</p>
                   </div>
@@ -1075,6 +1154,10 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
         @keyframes slideDown {
           from { opacity:0; transform:translate(-50%,-16px); }
           to   { opacity:1; transform:translate(-50%,0); }
+        }
+        @keyframes pulse-btn {
+          0%,100% { box-shadow: 0 2px 10px rgba(10,37,64,0.3); }
+          50%     { box-shadow: 0 4px 20px rgba(232,84,47,0.55); }
         }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 6px; }
