@@ -393,43 +393,72 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
     let frameId: number;
     let lastTs = 0;
     const INTERVAL = 200;
-    let blackFrameCount = 0;
-    let lastBlackAlert = 0;
+    // Track consecutive dark frames — only fire Camera Off when MediaPipe ALSO sees no face
+    let darkFrameCount = 0;
+    let lastCameraOffAlert = 0;
     const canvas = document.createElement('canvas');
-    canvas.width = 80; canvas.height = 60;
+    canvas.width = 160; canvas.height = 120; // larger canvas for better brightness reading
     const ctx = canvas.getContext('2d')!;
+
     const loop = (now: number) => {
       frameId = requestAnimationFrame(loop);
       if (now - lastTs < INTERVAL) return;
       lastTs = now;
       const video = videoRef.current;
       if (!video || video.readyState < 2 || video.videoWidth === 0) return;
-      ctx.drawImage(video, 0, 0, 80, 60);
-      const px = ctx.getImageData(0, 0, 80, 60).data;
+
+      // ── Step 1: Check actual camera track health (most reliable signal) ──
+      const stream = mediaStreamRef.current;
+      const videoTrack = stream?.getVideoTracks()[0];
+      const trackDead = videoTrack && (videoTrack.readyState === 'ended' || videoTrack.muted);
+
+      // ── Step 2: Compute frame brightness ──
+      ctx.drawImage(video, 0, 0, 160, 120);
+      const px = ctx.getImageData(0, 0, 160, 120).data;
       let brightness = 0;
       for (let i = 0; i < px.length; i += 4) brightness += px[i] + px[i + 1] + px[i + 2];
-      const avgBrightness = brightness / (80 * 60 * 3);
-      if (avgBrightness < 8) {
-        blackFrameCount++;
-        if (blackFrameCount >= 5 && now - lastBlackAlert > 10000) {
-          sendAlert('Camera Off', 'high', `Camera feed is completely dark — candidate may have turned off their camera or covered the lens.`);
-          lastBlackAlert = now;
-          blackFrameCount = 0;
-        }
-        return;
-      } else { blackFrameCount = 0; }
+      const avgBrightness = brightness / (160 * 120 * 3);
+      const isDark = avgBrightness < 10;
+
+      // ── Step 3: Always run MediaPipe — never skip it for brightness alone ──
       const fl = faceLandmarkerRef.current;
+      let mediaPipeFaceCount = -1; // -1 = not yet checked
       if (fl) {
-        try { const result = fl.detectForVideo(video, now); processProctorResult(result, now); } catch (_) {}
+        try {
+          const result = fl.detectForVideo(video, now);
+          mediaPipeFaceCount = (result.faceLandmarks ?? []).length;
+          // Only process gaze/look-away if frame is NOT completely dark
+          // (dark frame gaze values are meaningless noise)
+          if (!isDark) {
+            processProctorResult(result, now);
+          }
+        } catch (_) {}
       } else {
+        // Fallback skin-pixel detection when MediaPipe hasn't loaded yet
         let skinPixels = 0;
         for (let i = 0; i < px.length; i += 4) {
           const r = px[i], g = px[i + 1], b = px[i + 2];
           const maxRG = Math.max(r, g, b);
           if (maxRG > 60 && r > 40 && g > 20 && b > 10 && r >= g && r >= b && (r - Math.min(g, b)) > 10) skinPixels++;
         }
-        const detected = skinPixels / (80 * 60) > 0.04;
-        setProctorStatus(prev => ({ ...prev, faceDetected: detected, faceCount: detected ? 1 : 0 }));
+        mediaPipeFaceCount = skinPixels / (160 * 120) > 0.04 ? 1 : 0;
+        setProctorStatus(prev => ({ ...prev, faceDetected: mediaPipeFaceCount! > 0, faceCount: mediaPipeFaceCount! > 0 ? 1 : 0 }));
+      }
+
+      // ── Step 4: Camera Off alert — only when track is dead OR (dark AND no face) ──
+      // This prevents false positives where lighting is dim but candidate is present
+      const noFaceVisible = mediaPipeFaceCount === 0;
+      const cameraReallyOff = trackDead || (isDark && noFaceVisible);
+      if (cameraReallyOff) {
+        darkFrameCount++;
+        // Require 12 consecutive dark+no-face frames (~2.4s) before alerting
+        if (darkFrameCount >= 12 && now - lastCameraOffAlert > 15000) {
+          sendAlert('Camera Off', 'high', `Camera feed is completely dark — candidate may have turned off their camera or covered the lens.`);
+          lastCameraOffAlert = now;
+          darkFrameCount = 0;
+        }
+      } else {
+        darkFrameCount = 0;
       }
     };
     frameId = requestAnimationFrame(loop);
@@ -608,7 +637,8 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         )}
       </main>
 
-      <video ref={videoRef} autoPlay muted playsInline style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1 }} />
+      {/* Hidden video for MediaPipe — must NOT be 1x1px or display:none or browser skips rendering frames */}
+      <video ref={videoRef} autoPlay muted playsInline style={{ position: 'fixed', top: -9999, left: -9999, width: 320, height: 240, opacity: 0, pointerEvents: 'none' }} />
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes spin { to { transform: rotate(360deg); } }
