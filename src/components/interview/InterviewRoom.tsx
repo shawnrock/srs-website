@@ -27,6 +27,8 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
   const [cameraOff, setCameraOff] = useState(false);
   const [dailyUrl, setDailyUrl] = useState<string | null>(null);
   const [reconnecting, setReconnecting] = useState(false); // true during rejoin media setup
+  const [showQuestionText, setShowQuestionText] = useState(false);
+  const [questionText, setQuestionText] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -388,6 +390,26 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [sendAlert]);
 
+  // Poll for showQuestionText toggle from interviewer every 3s during interview
+  useEffect(() => {
+    if (state !== STATES.INTERVIEW) return;
+    const poll = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/interviews/${sessionId}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        setShowQuestionText(data.showQuestionText ?? false);
+        if (data.currentQuestionText) setQuestionText(data.currentQuestionText);
+        // Sync current question number in case of drift
+        if (data.currentQuestion !== undefined) {
+          setCurrentQuestion(data.currentQuestion);
+          currentQuestionRef.current = data.currentQuestion;
+        }
+      } catch (_) {}
+    }, 3000);
+    return () => clearInterval(poll);
+  }, [state, sessionId]);
+
   useEffect(() => {
     if (state !== STATES.INTERVIEW || !videoRef.current) return;
     let frameId: number;
@@ -613,6 +635,26 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
             <div style={{ background: '#e2e8f0', borderRadius: 8, height: 6 }}>
               <div style={{ height: '100%', borderRadius: 8, background: 'linear-gradient(90deg, #e8542f, #0097a7)', width: `${((currentQuestion + 1) / totalQuestions) * 100}%`, transition: 'width 0.5s ease' }} />
             </div>
+
+            {/* ── Question text card — shown when interviewer toggles it on ── */}
+            {showQuestionText && questionText && (
+              <div style={{
+                background: 'linear-gradient(135deg, #0a2540, #1e3a5f)',
+                borderRadius: 12, padding: '18px 22px',
+                border: '2px solid #0097a7',
+                boxShadow: '0 4px 20px rgba(10,37,64,0.25)',
+                animation: 'fadeSlideIn 0.3s ease',
+              }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>📖</span>
+                  <span>Question {currentQuestion + 1} of {totalQuestions}</span>
+                </div>
+                <p style={{ fontSize: 17, color: '#fff', margin: 0, lineHeight: 1.6, fontWeight: 500 }}>
+                  {questionText}
+                </p>
+              </div>
+            )}
+
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '12px 20px', borderRadius: 10, background: isListening ? '#f0fdf4' : '#f8fafc', border: `1px solid ${isListening ? '#a7f3d0' : '#e2e8f0'}` }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: isListening ? '#10b981' : '#94a3b8', animation: isListening ? 'pulse 1s infinite' : 'none', flexShrink: 0 }} />
               <span style={{ fontSize: 13, color: isListening ? '#059669' : '#94a3b8', fontWeight: 500 }}>{isListening ? 'Microphone active — speak clearly' : 'Microphone inactive'}</span>
@@ -642,6 +684,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
   );

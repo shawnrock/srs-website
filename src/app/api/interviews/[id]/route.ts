@@ -7,6 +7,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!session) {
     return NextResponse.json({ error: 'Session not found' }, { status: 404 });
   }
+  const qIdx = session.currentQuestion ?? 0;
+  const qText = session.questions?.[qIdx]?.text || session.questions?.[qIdx]?.question || null;
   return NextResponse.json({
     id: session.id,
     status: session.status,
@@ -16,6 +18,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     totalQuestions: session.questions?.length || 0,
     currentQuestion: session.currentQuestion,
     dailyRoomUrl: session.dailyRoomUrl,
+    showQuestionText: session.showQuestionText ?? false,
+    currentQuestionText: qText,
   });
 }
 
@@ -62,6 +66,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await sessionManager.updateSession(id, {
       proctorAlerts: [...(session.proctorAlerts ?? []), body.alert],
     });
+    return NextResponse.json({ success: true });
+  }
+
+  // Interviewer toggling question text visibility for the candidate
+  if (body.showQuestionText !== undefined) {
+    await sessionManager.updateSession(id, { showQuestionText: body.showQuestionText });
     return NextResponse.json({ success: true });
   }
 

@@ -139,6 +139,7 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
   const [participantCount, setParticipantCount] = useState(0);
   const [extraParticipants, setExtraParticipants] = useState<{ id: string; name: string }[]>([]);
   const [multiPersonDismissed, setMultiPersonDismissed] = useState(false);
+  const [showQuestionText, setShowQuestionText] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
@@ -234,6 +235,7 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
         }
         if (data.answerTranscripts) setAnswerTranscripts(data.answerTranscripts);
         if (data.currentQuestion !== undefined) setCurrentQuestion(data.currentQuestion);
+        if (data.showQuestionText !== undefined) setShowQuestionText(data.showQuestionText);
         if (data.proctorAlerts) {
           setProctorAlerts(data.proctorAlerts);
           // Derive face status from recent alerts (REST fallback when WS unavailable)
@@ -927,6 +929,38 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
                     ))}
                   </div>
                 )}
+
+                {/* ── Show Question to Candidate toggle ── */}
+                <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: '10px 14px' }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', marginBottom: 2 }}>
+                      📖 Show question text to candidate
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>
+                      {showQuestionText ? 'Candidate can read the question on screen' : 'Candidate hears question via interviewer only'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const next = !showQuestionText;
+                      setShowQuestionText(next);
+                      await patchSession({ showQuestionText: next });
+                    }}
+                    style={{
+                      flexShrink: 0, marginLeft: 12,
+                      width: 52, height: 28, borderRadius: 14, border: 'none', cursor: 'pointer',
+                      background: showQuestionText ? '#22c55e' : 'rgba(255,255,255,0.25)',
+                      position: 'relative', transition: 'background 0.2s',
+                    }}
+                    title={showQuestionText ? 'Click to hide question from candidate' : 'Click to show question to candidate'}
+                  >
+                    <span style={{
+                      position: 'absolute', top: 3, left: showQuestionText ? 26 : 3,
+                      width: 22, height: 22, borderRadius: '50%', background: '#fff',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.25)', transition: 'left 0.2s',
+                    }} />
+                  </button>
+                </div>
               </div>
 
               <Card style={{ marginBottom: 14, padding: 0, overflow: 'hidden' }}>

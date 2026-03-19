@@ -19,5 +19,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     profileAnalysis: session.profileAnalysis,
     dailyRoomUrl: session.dailyRoomUrl,
     report: session.report || null,
+    showQuestionText: session.showQuestionText ?? false,
   });
 }

@@ -5,12 +5,13 @@ export interface Session {
   id: string;
   jd: { title: string; client: string; description: string };
   candidate: { name: string; email: string; phone?: string; resume?: string; matchScore?: number };
-  questions: Array<{ text: string; category: string; keywords?: string[]; difficulty?: string }>;
+  questions: Array<{ text: string; question?: string; category: string; keywords?: string[]; difficulty?: string }>;
   scores: Record<number, any>;
   proctorAlerts: Array<{ check: string; severity: string; detail: string; timestamp: number }>;
   answerTranscripts: Record<number, string>;
   currentQuestion: number;
   status: 'scheduled' | 'waiting' | 'in_progress' | 'completed' | 'abandoned';
+  showQuestionText?: boolean;
   profileAnalysis: any | null;
   createdAt: string;
   lastActivityAt: string;
