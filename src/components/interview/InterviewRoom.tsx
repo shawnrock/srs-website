@@ -38,7 +38,7 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
   const isInterviewActiveRef = useRef(false);
   const currentQuestionRef = useRef(0);
   const faceLandmarkerRef = useRef<any>(null);
-  const gazeStateRef = useRef<any>({ lookDownStart: null, lookAwayStart: null, lastAlert: {}, lastFaceSeen: null });
+  const gazeStateRef = useRef<any>({ lookDownStart: null, lookUpStart: null, lookAwayStart: null, lastAlert: {}, lastFaceSeen: null });
 
   // Keep currentQuestionRef in sync so Deepgram callback can read latest value
   useEffect(() => { currentQuestionRef.current = currentQuestion; }, [currentQuestion]);
@@ -107,12 +107,15 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
     }
 
     let headTiltedDown = false;
+    let headTiltedUp = false;
     const m = matrices[0]?.data;
     if (m?.length >= 16) {
       const pitch = Math.asin(Math.max(-1, Math.min(1, -m[6]))) * (180 / Math.PI);
       headTiltedDown = pitch > 18;
+      headTiltedUp = pitch < -18;
     }
 
+    // ── Looking Down ──
     const lookingDown = gazeY > 0.65 || headTiltedDown;
     if (lookingDown) {
       if (!gaze.lookDownStart) gaze.lookDownStart = now;
@@ -125,6 +128,20 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       }
     } else { gaze.lookDownStart = null; }
 
+    // ── Looking Up ──
+    const lookingUp = gazeY < 0.25 || headTiltedUp;
+    if (lookingUp && !lookingDown) {
+      if (!gaze.lookUpStart) gaze.lookUpStart = now;
+      else if (now - gaze.lookUpStart > 2500) {
+        const key = 'look_up';
+        if (!gaze.lastAlert[key] || now - gaze.lastAlert[key] > 12000) {
+          sendAlert('Looking Up', 'warning', `Candidate is looking upward — eyes are not focused on the interview screen.`);
+          gaze.lastAlert[key] = now;
+        }
+      }
+    } else { gaze.lookUpStart = null; }
+
+    // ── Looking Away (left / right) ──
     const lookingAway = Math.abs(gazeX - 0.5) > 0.28;
     if (lookingAway) {
       if (!gaze.lookAwayStart) gaze.lookAwayStart = now;
@@ -149,8 +166,8 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         const filesetResolver = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
         const fl = await FaceLandmarker.createFromOptions(filesetResolver, {
           baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate: 'GPU' },
-          runningMode: 'VIDEO', numFaces: 3,
-          minFaceDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
+          runningMode: 'VIDEO', numFaces: 4,
+          minFaceDetectionConfidence: 0.35, minTrackingConfidence: 0.35,
           outputFaceBlendshapes: false, outputFacialTransformationMatrixes: true,
         });
         if (!cancelled) faceLandmarkerRef.current = fl;
@@ -415,72 +432,73 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
     let frameId: number;
     let lastTs = 0;
     const INTERVAL = 200;
-    // Track consecutive dark frames — only fire Camera Off when MediaPipe ALSO sees no face
-    let darkFrameCount = 0;
+    let darkNoFaceCount = 0;      // consecutive truly-dark + no-face frames
     let lastCameraOffAlert = 0;
+    let startupDelay = true;      // suppress all alerts for first 6 seconds
+    const startedAt = performance.now();
     const canvas = document.createElement('canvas');
-    canvas.width = 160; canvas.height = 120; // larger canvas for better brightness reading
+    canvas.width = 160; canvas.height = 120;
     const ctx = canvas.getContext('2d')!;
 
     const loop = (now: number) => {
       frameId = requestAnimationFrame(loop);
       if (now - lastTs < INTERVAL) return;
       lastTs = now;
+
+      // ── Startup grace period: give camera + Daily.co 6 s to settle ──
+      if (startupDelay) {
+        if (performance.now() - startedAt < 6000) return;
+        startupDelay = false;
+      }
+
       const video = videoRef.current;
       if (!video || video.readyState < 2 || video.videoWidth === 0) return;
 
-      // ── Step 1: Check actual camera track health (most reliable signal) ──
-      const stream = mediaStreamRef.current;
-      const videoTrack = stream?.getVideoTracks()[0];
-      const trackDead = videoTrack && (videoTrack.readyState === 'ended' || videoTrack.muted);
-
-      // ── Step 2: Compute frame brightness ──
+      // ── Compute frame brightness ──
       ctx.drawImage(video, 0, 0, 160, 120);
       const px = ctx.getImageData(0, 0, 160, 120).data;
       let brightness = 0;
       for (let i = 0; i < px.length; i += 4) brightness += px[i] + px[i + 1] + px[i + 2];
       const avgBrightness = brightness / (160 * 120 * 3);
-      const isDark = avgBrightness < 10;
+      // Only treat as truly dark when essentially pitch-black (< 5/255 avg).
+      // This avoids false positives in dim rooms or when Daily.co briefly
+      // mutes the parent-page camera track on certain browsers (Safari).
+      const isDark = avgBrightness < 5;
 
-      // ── Step 3: Always run MediaPipe — never skip it for brightness alone ──
+      // ── Always run MediaPipe regardless of brightness ──
       const fl = faceLandmarkerRef.current;
-      let mediaPipeFaceCount = -1; // -1 = not yet checked
+      let mediaPipeFaceCount = 0;
       if (fl) {
         try {
           const result = fl.detectForVideo(video, now);
           mediaPipeFaceCount = (result.faceLandmarks ?? []).length;
-          // Only process gaze/look-away if frame is NOT completely dark
-          // (dark frame gaze values are meaningless noise)
-          if (!isDark) {
-            processProctorResult(result, now);
-          }
+          // Run full gaze/face analysis only when the frame has enough light
+          if (!isDark) processProctorResult(result, now);
         } catch (_) {}
       } else {
-        // Fallback skin-pixel detection when MediaPipe hasn't loaded yet
+        // Skin-pixel fallback while MediaPipe model is still downloading
         let skinPixels = 0;
         for (let i = 0; i < px.length; i += 4) {
           const r = px[i], g = px[i + 1], b = px[i + 2];
-          const maxRG = Math.max(r, g, b);
-          if (maxRG > 60 && r > 40 && g > 20 && b > 10 && r >= g && r >= b && (r - Math.min(g, b)) > 10) skinPixels++;
+          if (r > 60 && g > 30 && b > 15 && r >= g && r >= b && (r - Math.min(g, b)) > 15) skinPixels++;
         }
-        mediaPipeFaceCount = skinPixels / (160 * 120) > 0.04 ? 1 : 0;
-        setProctorStatus(prev => ({ ...prev, faceDetected: mediaPipeFaceCount! > 0, faceCount: mediaPipeFaceCount! > 0 ? 1 : 0 }));
+        mediaPipeFaceCount = skinPixels / (160 * 120) > 0.03 ? 1 : 0;
+        setProctorStatus(prev => ({ ...prev, faceDetected: mediaPipeFaceCount > 0, faceCount: mediaPipeFaceCount > 0 ? 1 : 0 }));
       }
 
-      // ── Step 4: Camera Off alert — only when track is dead OR (dark AND no face) ──
-      // This prevents false positives where lighting is dim but candidate is present
-      const noFaceVisible = mediaPipeFaceCount === 0;
-      const cameraReallyOff = trackDead || (isDark && noFaceVisible);
-      if (cameraReallyOff) {
-        darkFrameCount++;
-        // Require 12 consecutive dark+no-face frames (~2.4s) before alerting
-        if (darkFrameCount >= 12 && now - lastCameraOffAlert > 15000) {
+      // ── Camera Off: ONLY fire when frame is truly pitch-black AND no face
+      //    for 30 consecutive frames (~6 s). Do NOT use trackDead — the parent
+      //    page's camera track can appear "muted" simply because Daily.co's
+      //    iframe claimed the same device (normal on Safari / some Chrome configs).
+      if (isDark && mediaPipeFaceCount === 0) {
+        darkNoFaceCount++;
+        if (darkNoFaceCount >= 30 && now - lastCameraOffAlert > 20000) {
           sendAlert('Camera Off', 'high', `Camera feed is completely dark — candidate may have turned off their camera or covered the lens.`);
           lastCameraOffAlert = now;
-          darkFrameCount = 0;
+          darkNoFaceCount = 0;
         }
       } else {
-        darkFrameCount = 0;
+        darkNoFaceCount = 0;
       }
     };
     frameId = requestAnimationFrame(loop);

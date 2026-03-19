@@ -249,12 +249,13 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
             a.check === 'Camera Off / No Face' || a.check === 'Looking Down / Face Left Frame' || a.check === 'Camera Turned Off'
           );
           const hasLookDown = recent.some((a: any) => a.check === 'Looking Down');
+          const hasLookUp   = recent.some((a: any) => a.check === 'Looking Up');
           const hasLookAway = recent.some((a: any) => a.check === 'Looking Away');
           setFaceStatus({
             detected: !hasNoFace,
-            eyeContact: !hasLookAway && !hasLookDown && !hasNoFace,
+            eyeContact: !hasLookAway && !hasLookDown && !hasLookUp && !hasNoFace,
             faceCount: hasMultiFace ? 2 : hasNoFace ? 0 : 1,
-            gazeDirection: hasLookDown ? 'down' : hasLookAway ? 'away' : null,
+            gazeDirection: hasLookDown ? 'down' : hasLookUp ? 'up' : hasLookAway ? 'away' : null,
           });
           // Show toast for most recent alert that arrived in last 8 s (REST fallback)
           const veryRecent = (data.proctorAlerts as any[]).filter((a: any) => now - a.timestamp < 8000);
@@ -541,6 +542,7 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
                   'Face Left Frame': '🙈',
                   'No Face Detected': '👤',
                   'Looking Down': '👇',
+                  'Looking Up': '👆',
                   'Looking Away': '👀',
                   'Camera Off': '📷',
                   'Camera Turned Off': '📷',
