@@ -21,7 +21,10 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
   const [liveTranscript, setLiveTranscript] = useState('');
   const [fullTranscript, setFullTranscript] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const [proctorStatus, setProctorStatus] = useState({ faceDetected: false, eyeContact: false, faceCount: 0, gazeX: 0.5, gazeY: 0.5 });
+  // Start optimistic: candidate just set up camera so we assume face is present
+  // until MediaPipe proves otherwise with sustained absence
+  const [proctorStatus, setProctorStatus] = useState({ faceDetected: true, eyeContact: true, faceCount: 1, gazeX: 0.5, gazeY: 0.5 });
+  const consecutiveNoFaceRef = useRef(0); // frames with no face — only flip badge after sustained absence
   const [error, setError] = useState<string | null>(null);
   const [videoConnected, setVideoConnected] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
@@ -72,21 +75,29 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
     }
 
     if (!detected) {
-      const key = 'no_face';
-      if (!gaze.lastAlert[key] || now - gaze.lastAlert[key] > 8000) {
-        const vanishedRecently = gaze.lastFaceSeen && (now - gaze.lastFaceSeen) < 6000;
-        if (vanishedRecently) {
-          sendAlert('Face Left Frame', 'high', `Candidate's face moved out of camera view — may be looking down at notes or a phone.`);
-        } else {
-          sendAlert('No Face Detected', 'high', `No face visible in camera — candidate may have stepped away or the camera is blocked.`);
+      consecutiveNoFaceRef.current += 1;
+      // Require 8 consecutive no-face frames (~1.6 s) before flipping badge
+      // This prevents a single dark / transitional frame from showing "No Face"
+      if (consecutiveNoFaceRef.current >= 8) {
+        setProctorStatus({ faceDetected: false, faceCount: 0, eyeContact: false, gazeX: 0.5, gazeY: 0.5 });
+        const key = 'no_face';
+        if (!gaze.lastAlert[key] || now - gaze.lastAlert[key] > 8000) {
+          const vanishedRecently = gaze.lastFaceSeen && (now - gaze.lastFaceSeen) < 6000;
+          if (vanishedRecently) {
+            sendAlert('Face Left Frame', 'high', `Candidate's face moved out of camera view — may be looking down at notes or a phone.`);
+          } else {
+            sendAlert('No Face Detected', 'high', `No face visible in camera — candidate may have stepped away or the camera is blocked.`);
+          }
+          gaze.lastAlert[key] = now;
         }
-        gaze.lastAlert[key] = now;
       }
       gaze.lookDownStart = null;
       gaze.lookAwayStart = null;
-      setProctorStatus({ faceDetected: false, faceCount: 0, eyeContact: false, gazeX: 0.5, gazeY: 0.5 });
+      gaze.lookUpStart = null;
       return;
     }
+    // Face IS detected — reset counter and immediately show as detected
+    consecutiveNoFaceRef.current = 0;
 
     gaze.lastFaceSeen = now;
     const lm = faces[0];
@@ -472,18 +483,28 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         try {
           const result = fl.detectForVideo(video, now);
           mediaPipeFaceCount = (result.faceLandmarks ?? []).length;
-          // Run full gaze/face analysis only when the frame has enough light
-          if (!isDark) processProctorResult(result, now);
+          if (isDark) {
+            // Dark frame = stream likely muted by Daily.co taking camera priority.
+            // Don't update proctorStatus — preserve whatever the last known state was.
+            // Reset no-face counter so we don't count dark frames as "no face" evidence.
+            consecutiveNoFaceRef.current = 0;
+          } else {
+            // Good frame — run full gaze + face analysis
+            processProctorResult(result, now);
+          }
         } catch (_) {}
       } else {
         // Skin-pixel fallback while MediaPipe model is still downloading
-        let skinPixels = 0;
-        for (let i = 0; i < px.length; i += 4) {
-          const r = px[i], g = px[i + 1], b = px[i + 2];
-          if (r > 60 && g > 30 && b > 15 && r >= g && r >= b && (r - Math.min(g, b)) > 15) skinPixels++;
+        if (!isDark) {
+          let skinPixels = 0;
+          for (let i = 0; i < px.length; i += 4) {
+            const r = px[i], g = px[i + 1], b = px[i + 2];
+            if (r > 60 && g > 30 && b > 15 && r >= g && r >= b && (r - Math.min(g, b)) > 15) skinPixels++;
+          }
+          mediaPipeFaceCount = skinPixels / (160 * 120) > 0.03 ? 1 : 0;
+          if (mediaPipeFaceCount > 0) consecutiveNoFaceRef.current = 0;
+          setProctorStatus(prev => ({ ...prev, faceDetected: mediaPipeFaceCount > 0, faceCount: mediaPipeFaceCount > 0 ? 1 : 0 }));
         }
-        mediaPipeFaceCount = skinPixels / (160 * 120) > 0.03 ? 1 : 0;
-        setProctorStatus(prev => ({ ...prev, faceDetected: mediaPipeFaceCount > 0, faceCount: mediaPipeFaceCount > 0 ? 1 : 0 }));
       }
 
       // ── Camera Off: ONLY fire when frame is truly pitch-black AND no face
