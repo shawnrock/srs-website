@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // ============================================
 // INTERVIEWER DASHBOARD
@@ -140,10 +140,16 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
   const [extraParticipants, setExtraParticipants] = useState<{ id: string; name: string }[]>([]);
   const [multiPersonDismissed, setMultiPersonDismissed] = useState(false);
   const [showQuestionText, setShowQuestionText] = useState(false);
+  const [elapsed, setElapsed] = useState(0);            // seconds since interview started
+  const [snapshots, setSnapshots] = useState<{ ts: string; url: string }[]>([]);
+  const [snapshotFlash, setSnapshotFlash] = useState(false);
+  const [takingShot, setTakingShot] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const reportFetchedRef = useRef(false);
+  const dashboardRef = useRef<HTMLDivElement | null>(null);
+  const interviewStartedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (navigator.permissions) {
@@ -362,6 +368,55 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
     return () => clearTimeout(t);
   }, [latestAlert]);
 
+  // ── Interview elapsed timer ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!interviewStarted) return;
+    if (!interviewStartedAtRef.current) interviewStartedAtRef.current = Date.now();
+    const tick = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - interviewStartedAtRef.current!) / 1000));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [interviewStarted]);
+
+  const formatTime = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
+
+  // ── Screenshot ───────────────────────────────────────────────────────────
+  const takeSnapshot = useCallback(async () => {
+    if (!dashboardRef.current || takingShot) return;
+    setTakingShot(true);
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(dashboardRef.current, {
+        useCORS: true,
+        allowTaint: false,
+        ignoreElements: (el) => el.tagName === 'IFRAME', // skip Daily.co video
+        backgroundColor: '#f4f6fb',
+        scale: 1.5,
+      });
+      const url = canvas.toDataURL('image/png');
+      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setSnapshots(prev => [...prev, { ts, url }]);
+      // Auto-download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `srs-interview-snapshot-${Date.now()}.png`;
+      a.click();
+      // Flash feedback
+      setSnapshotFlash(true);
+      setTimeout(() => setSnapshotFlash(false), 600);
+    } catch (err) {
+      console.error('[Snapshot]', err);
+    } finally {
+      setTakingShot(false);
+    }
+  }, [takingShot]);
+
   const patchSession = (body: object) =>
     fetch(`/api/interviews/${sessionId}`, {
       method: 'PATCH',
@@ -370,6 +425,7 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
     });
 
   const startInterview = async () => {
+    interviewStartedAtRef.current = Date.now();
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'start_interview' }));
     } else {
@@ -599,7 +655,17 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
 
   // ── MAIN INTERVIEW CONTROL VIEW ───────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, fontFamily: 'system-ui, -apple-system, sans-serif', color: C.text }}>
+    <div ref={dashboardRef} style={{ minHeight: '100vh', background: C.bg, fontFamily: 'system-ui, -apple-system, sans-serif', color: C.text, position: 'relative' }}>
+
+      {/* ── Snapshot flash overlay ── */}
+      {snapshotFlash && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 99999,
+          background: 'rgba(255,255,255,0.75)',
+          animation: 'flashOut 0.6s ease forwards',
+          pointerEvents: 'none',
+        }} />
+      )}
 
       {latestAlert && (
         <div style={{
@@ -732,6 +798,54 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
           }>
             {status.toUpperCase()}
           </Badge>
+
+          {/* ── Live timer (only while interview is running) ── */}
+          {interviewStarted && status !== 'completed' && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              background: elapsed > 0 && elapsed % 60 === 0 ? C.amberLight : C.primaryLight,
+              border: `1px solid ${elapsed > 0 && elapsed % 60 === 0 ? '#fde68a' : '#c7d2fe'}`,
+              borderRadius: 8, padding: '5px 14px', transition: 'background 0.4s',
+            }}>
+              <span style={{ fontSize: 13 }}>⏱</span>
+              <span style={{
+                fontVariantNumeric: 'tabular-nums', fontWeight: 700,
+                fontSize: 15, color: C.primary, letterSpacing: '0.04em',
+                fontFamily: 'monospace',
+              }}>
+                {formatTime(elapsed)}
+              </span>
+            </div>
+          )}
+
+          {/* ── Screenshot button (only while interview is running) ── */}
+          {interviewStarted && status !== 'completed' && (
+            <button
+              onClick={takeSnapshot}
+              disabled={takingShot}
+              title={`Take snapshot of interview state${snapshots.length > 0 ? ` (${snapshots.length} taken)` : ''}`}
+              style={{
+                padding: '6px 14px', borderRadius: 8,
+                border: `1px solid ${C.borderStrong}`,
+                background: takingShot ? C.surfaceAlt : C.surface,
+                color: C.text, fontWeight: 600, fontSize: 12,
+                cursor: takingShot ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+                opacity: takingShot ? 0.6 : 1, transition: 'opacity 0.2s',
+              }}
+            >
+              {takingShot ? '⏳' : '📸'}
+              {takingShot ? 'Capturing…' : 'Snapshot'}
+              {snapshots.length > 0 && (
+                <span style={{
+                  background: C.accent, color: '#fff', fontSize: 10,
+                  fontWeight: 700, borderRadius: 10, padding: '1px 6px', marginLeft: 2,
+                }}>
+                  {snapshots.length}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* ── Start Interview shortcut in header (visible before interview begins) ── */}
           {candidateConnected && !interviewStarted && status !== 'completed' && (
@@ -1194,6 +1308,10 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
         @keyframes pulse-btn {
           0%,100% { box-shadow: 0 2px 10px rgba(10,37,64,0.3); }
           50%     { box-shadow: 0 4px 20px rgba(232,84,47,0.55); }
+        }
+        @keyframes flashOut {
+          0%   { opacity: 1; }
+          100% { opacity: 0; }
         }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 6px; }

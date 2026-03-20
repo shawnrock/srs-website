@@ -16,6 +16,7 @@
     "@types/pdfkit": "^0.17.5",
     "@types/react": "^19.2.14",
     "@upstash/redis": "^1.37.0",
+    "html2canvas": "^1.4.1",
     "lucide-react": "^0.577.0",
     "next": "^16.1.6",
     "nodemailer": "^8.0.2",

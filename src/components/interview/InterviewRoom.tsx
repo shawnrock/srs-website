@@ -557,8 +557,13 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         </div>
       )}
       {state === STATES.INTERVIEW && dailyUrl && (
-        <div style={{ position: 'absolute', top: 12, left: 12, background: 'rgba(232,84,47,0.9)', padding: '6px 14px', borderRadius: 8, fontSize: 13, color: '#fff', fontWeight: 'bold', zIndex: 10, pointerEvents: 'none' }}>
-          Q{currentQuestion + 1}/{totalQuestions}
+        <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', gap: 6, zIndex: 10, pointerEvents: 'none' }}>
+          <div style={{ background: 'rgba(232,84,47,0.92)', padding: '5px 12px', borderRadius: 8, fontSize: 13, color: '#fff', fontWeight: 'bold' }}>
+            Q{currentQuestion + 1}/{totalQuestions}
+          </div>
+          <div style={{ background: 'rgba(10,37,64,0.85)', padding: '5px 12px', borderRadius: 8, fontSize: 13, color: '#fff', fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+            ⏱ {formatTime(elapsed)}
+          </div>
         </div>
       )}
       {state === STATES.INTERVIEW && (
