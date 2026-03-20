@@ -12,6 +12,7 @@ export interface Session {
   currentQuestion: number;
   status: 'scheduled' | 'waiting' | 'in_progress' | 'completed' | 'abandoned';
   showQuestionText?: boolean;
+  interviewStartedAt?: string;   // ISO timestamp when status flipped to in_progress
   profileAnalysis: any | null;
   createdAt: string;
   lastActivityAt: string;

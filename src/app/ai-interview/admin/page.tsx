@@ -102,6 +102,11 @@ export default function AdminDashboard() {
               className="p-2 text-gray-400 hover:text-white transition-colors" title="Refresh">
               <RefreshCw size={18} />
             </button>
+            <Link href="/ai-interview/admin/reports"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors"
+              style={{ background: '#e8f0fb', color: '#0a2540', border: '1px solid #c7d2fe' }}>
+              📊 Reports & Analytics
+            </Link>
             <Link href="/ai-interview/setup"
               className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-semibold rounded-lg hover:bg-accent-dark transition-colors">
               <Plus size={16} /> New Interview

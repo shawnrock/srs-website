@@ -32,7 +32,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Interview control actions from observer
   if (body.action === 'start_interview') {
-    await sessionManager.updateSession(id, { status: 'in_progress', currentQuestion: 0 });
+    await sessionManager.updateSession(id, {
+      status: 'in_progress',
+      currentQuestion: 0,
+      interviewStartedAt: new Date().toISOString(),
+    });
     return NextResponse.json({ success: true, status: 'in_progress', currentQuestion: 0 });
   }
 

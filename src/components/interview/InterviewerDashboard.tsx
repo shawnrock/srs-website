@@ -387,35 +387,71 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
   };
 
   // ── Screenshot ───────────────────────────────────────────────────────────
+  // Uses getDisplayMedia (screen-capture API) so the Daily.co candidate
+  // video is captured as-is — html2canvas cannot read cross-origin iframes.
   const takeSnapshot = useCallback(async () => {
-    if (!dashboardRef.current || takingShot) return;
+    if (takingShot) return;
     setTakingShot(true);
     try {
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(dashboardRef.current, {
-        useCORS: true,
-        allowTaint: false,
-        ignoreElements: (el) => el.tagName === 'IFRAME', // skip Daily.co video
-        backgroundColor: '#f4f6fb',
-        scale: 1.5,
+      // Ask the browser to share the current tab including video iframes.
+      // preferCurrentTab (Chrome 94+) skips the picker and grabs this tab.
+      const stream = await (navigator.mediaDevices as any).getDisplayMedia({
+        video: { displaySurface: 'browser', frameRate: 1 },
+        audio: false,
+        preferCurrentTab: true,       // Chrome — no picker, instant grab
+        selfBrowserSurface: 'include',
       });
+
+      // Draw one frame to a canvas
+      const vid = document.createElement('video');
+      vid.srcObject = stream;
+      vid.muted = true;
+      await new Promise<void>(res => { vid.onloadedmetadata = () => res(); });
+      await vid.play();
+      // Wait a tick so the frame renders
+      await new Promise(res => setTimeout(res, 120));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = vid.videoWidth || 1920;
+      canvas.height = vid.videoHeight || 1080;
+      canvas.getContext('2d')!.drawImage(vid, 0, 0);
+      stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+
       const url = canvas.toDataURL('image/png');
       const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       setSnapshots(prev => [...prev, { ts, url }]);
-      // Auto-download
+
       const a = document.createElement('a');
       a.href = url;
-      a.download = `srs-interview-snapshot-${Date.now()}.png`;
+      a.download = `srs-interview-${session?.candidate?.name?.replace(/\s+/g, '-') || 'snapshot'}-${Date.now()}.png`;
       a.click();
-      // Flash feedback
+
       setSnapshotFlash(true);
       setTimeout(() => setSnapshotFlash(false), 600);
-    } catch (err) {
-      console.error('[Snapshot]', err);
+    } catch (err: any) {
+      // User cancelled screen-share picker or browser unsupported →
+      // fall back to html2canvas (no video, but captures all text/UI)
+      if (err?.name !== 'NotAllowedError') {
+        try {
+          const html2canvas = (await import('html2canvas')).default;
+          const canvas = await html2canvas(dashboardRef.current!, {
+            useCORS: true, allowTaint: false, backgroundColor: '#f4f6fb', scale: 1.5,
+          });
+          const url = canvas.toDataURL('image/png');
+          const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          setSnapshots(prev => [...prev, { ts, url }]);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `srs-interview-snapshot-${Date.now()}.png`;
+          a.click();
+          setSnapshotFlash(true);
+          setTimeout(() => setSnapshotFlash(false), 600);
+        } catch (e2) { console.error('[Snapshot fallback]', e2); }
+      }
     } finally {
       setTakingShot(false);
     }
-  }, [takingShot]);
+  }, [takingShot, session]);
 
   const patchSession = (body: object) =>
     fetch(`/api/interviews/${sessionId}`, {

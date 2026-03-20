@@ -3,6 +3,7 @@ import { sessionManager } from '@/lib/session-manager';
 import { geminiService } from '@/lib/gemini-service';
 import { ScoringEngine } from '@/lib/scoring-engine';
 import { sendInterviewReport } from '@/lib/email';
+import { archiveStore } from '@/lib/interview-archive';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -87,6 +88,44 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     await sessionManager.updateSession(id, { report });
+
+    // ── Persist to long-term archive (non-blocking, best-effort) ──────────
+    const skills: string[] = [];
+    const pa = session.profileAnalysis;
+    if (pa?.keySkills) skills.push(...pa.keySkills);
+    else if (pa?.skills) skills.push(...pa.skills);
+
+    const interviewDate = session.interviewStartedAt || session.createdAt;
+    const durationMs = session.interviewStartedAt
+      ? new Date(report.interviewDate).getTime() - new Date(session.interviewStartedAt).getTime()
+      : 0;
+    const durationMinutes = Math.round(durationMs / 60000);
+
+    archiveStore.archive({
+      id,
+      sessionId: id,
+      interviewerName: session.recruiterName || 'Unknown',
+      interviewerEmail: session.recruiterEmail || 'unknown@srsinfoway.com',
+      candidateName: session.candidate?.name || '',
+      candidateEmail: session.candidate?.email || '',
+      position: session.jd?.title || '',
+      client: session.jd?.client || '',
+      skills,
+      matchScore: session.candidate?.matchScore || 0,
+      overallScore: report.overallScore || 0,
+      recommendation: report.recommendation || '',
+      interviewDate,
+      archivedAt: new Date().toISOString(),
+      interviewDurationMinutes: durationMinutes,
+      totalQuestions: session.questions?.length || 0,
+      questionsAnswered: Object.keys(session.answerTranscripts || {}).length,
+      proctorAlerts: proctorAlerts.length,
+      proctorRedFlags,
+      proctorScore,
+      reportSummary: report.summary || '',
+      strengths: report.strengths || [],
+      areasForImprovement: report.areasForImprovement || report.weaknesses || [],
+    }).catch(err => console.error('[Archive] Failed:', err));
 
     // Email report PDF to recruiter (non-blocking)
     if (session.recruiterEmail) {
