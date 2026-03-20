@@ -125,6 +125,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       reportSummary: report.summary || '',
       strengths: report.strengths || [],
       areasForImprovement: report.areasForImprovement || report.weaknesses || [],
+      interviewerNotes: session.interviewerNotes || '',
+      candidateInfo: session.candidateInfo || undefined,
     }).catch(err => console.error('[Archive] Failed:', err));
 
     // Email report PDF to recruiter (non-blocking)

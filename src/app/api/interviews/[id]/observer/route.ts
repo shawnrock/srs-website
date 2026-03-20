@@ -20,5 +20,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     dailyRoomUrl: session.dailyRoomUrl,
     report: session.report || null,
     showQuestionText: session.showQuestionText ?? false,
+    candidateInfo: session.candidateInfo || null,
+    interviewerNotes: session.interviewerNotes || '',
   });
 }

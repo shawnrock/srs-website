@@ -5,6 +5,7 @@ import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 const STATES = {
   LOADING: 'loading',
   SETUP: 'setup',
+  CANDIDATE_FORM: 'candidate_form', // candidate fills in profile info before waiting room
   RECONNECTING: 'reconnecting', // interview is live, candidate lost connection
   READY: 'ready',
   INTERVIEW: 'interview',
@@ -32,6 +33,20 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
   const [reconnecting, setReconnecting] = useState(false); // true during rejoin media setup
   const [showQuestionText, setShowQuestionText] = useState(false);
   const [questionText, setQuestionText] = useState<string | null>(null);
+
+  // Candidate profile form (shown once before waiting room)
+  const [candidateForm, setCandidateForm] = useState({
+    totalExperience: '',
+    relevantExperience: '',
+    highestDegree: '',
+    currentLocation: '',
+    currentSalary: '',
+    expectedSalary: '',
+    locationPreference: '',
+    noticePeriod: '',
+  });
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -195,6 +210,20 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         setSession(data);
         setTotalQuestions(data.totalQuestions || 5);
 
+        // Pre-fill candidate form from existing candidateInfo (if already submitted) or profileAnalysis
+        if (data.candidateInfo) {
+          setCandidateForm(prev => ({ ...prev, ...data.candidateInfo }));
+        } else if (data.profileAnalysis) {
+          const pa = data.profileAnalysis;
+          setCandidateForm(prev => ({
+            ...prev,
+            totalExperience: pa.totalExperience || (pa.experienceYears ? `${pa.experienceYears} years` : ''),
+            relevantExperience: pa.relevantExperience || '',
+            highestDegree: pa.highestDegree || '',
+            currentLocation: pa.currentLocation || '',
+          }));
+        }
+
         // Interview already completed — go straight to done screen
         if (data.status === 'completed') {
           setState(STATES.COMPLETE);
@@ -220,6 +249,29 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
       })
       .catch(() => { setError('Interview session not found or has expired. Please contact your recruiter for a new link.'); setState(STATES.ERROR); });
   }, [sessionId]);
+
+  const submitCandidateForm = async () => {
+    const errors: string[] = [];
+    if (!candidateForm.currentSalary.trim()) errors.push('Current CTC is required');
+    if (!candidateForm.expectedSalary.trim()) errors.push('Expected CTC is required');
+    if (!candidateForm.locationPreference.trim()) errors.push('Location preference is required');
+    if (!candidateForm.noticePeriod.trim()) errors.push('Notice period is required');
+    if (errors.length > 0) { setFormErrors(errors); return; }
+    setFormErrors([]);
+    setFormSubmitting(true);
+    try {
+      await fetch(`/api/interviews/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_notes', candidateInfo: candidateForm }),
+      });
+      setState(STATES.READY);
+    } catch (_) {
+      setState(STATES.READY); // proceed anyway even if save fails
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
 
   const setupMedia = useCallback(async (isRejoin = false) => {
     try {
@@ -250,7 +302,8 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
         setState(STATES.INTERVIEW);
         startDeepgramSTTRef.current();
       } else {
-        setState(STATES.READY);
+        // First join — show candidate profile form before waiting room
+        setState(STATES.CANDIDATE_FORM);
       }
     } catch (err: any) {
       setError(`Camera/microphone access failed: ${err.message}`);
@@ -618,6 +671,99 @@ export default function InterviewRoom({ sessionId }: { sessionId: string }) {
             <button onClick={() => setupMedia(false)} style={{ padding: '12px 32px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #0a2540, #e8542f)', color: 'white', fontWeight: 'bold', fontSize: 16, cursor: 'pointer' }}>
               Grant Camera &amp; Mic Access
             </button>
+          </div>
+        )}
+
+        {state === STATES.CANDIDATE_FORM && (
+          <div style={{ width: '100%', maxWidth: 640, background: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ background: 'linear-gradient(135deg, #0a2540, #1a3a5c)', padding: '24px 28px' }}>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>Before we begin</div>
+              <h2 style={{ color: '#fff', margin: 0, fontSize: 20, fontWeight: 700 }}>Please confirm your profile details</h2>
+              <p style={{ color: 'rgba(255,255,255,0.65)', margin: '6px 0 0', fontSize: 13 }}>
+                Fields marked with * are required. Pre-filled information is extracted from your resume — please verify and correct if needed.
+              </p>
+            </div>
+
+            <div style={{ padding: '24px 28px' }}>
+              {/* AI-extracted (editable) */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ background: '#e8f0fb', color: '#0a2540', padding: '2px 8px', borderRadius: 10, fontSize: 10 }}>🤖 Auto-filled from your resume</span>
+                  <span>— please verify</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  {[
+                    { label: 'Total Experience', key: 'totalExperience', placeholder: 'e.g. 7 years 3 months' },
+                    { label: 'Relevant Experience', key: 'relevantExperience', placeholder: 'e.g. 5 years in React/Node' },
+                    { label: 'Highest Qualification', key: 'highestDegree', placeholder: 'e.g. B.Tech CS, 2016' },
+                    { label: 'Current Location', key: 'currentLocation', placeholder: 'e.g. Austin, TX' },
+                  ].map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 5 }}>{label}</label>
+                      <input
+                        type="text"
+                        value={candidateForm[key as keyof typeof candidateForm]}
+                        onChange={e => setCandidateForm(prev => ({ ...prev, [key]: e.target.value }))}
+                        placeholder={placeholder}
+                        style={{ width: '100%', padding: '9px 12px', fontSize: 13, borderRadius: 8, border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', background: '#f8fafc', color: '#1e293b' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ borderTop: '1px solid #f1f5f9', margin: '4px 0 20px' }} />
+
+              {/* Candidate-entered required fields */}
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+                  Required Information *
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                  {[
+                    { label: 'Current CTC *', key: 'currentSalary', placeholder: 'e.g. $85,000/yr or 12 LPA' },
+                    { label: 'Expected CTC *', key: 'expectedSalary', placeholder: 'e.g. $105,000/yr or 15 LPA' },
+                    { label: 'Location Preference *', key: 'locationPreference', placeholder: 'e.g. Remote / Austin, TX / Hybrid' },
+                    { label: 'Notice Period *', key: 'noticePeriod', placeholder: 'e.g. 30 days / Immediate / 2 months' },
+                  ].map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#0a2540', marginBottom: 5 }}>{label}</label>
+                      <input
+                        type="text"
+                        value={candidateForm[key as keyof typeof candidateForm]}
+                        onChange={e => setCandidateForm(prev => ({ ...prev, [key]: e.target.value }))}
+                        placeholder={placeholder}
+                        style={{ width: '100%', padding: '9px 12px', fontSize: 13, borderRadius: 8, border: `1px solid ${formErrors.length > 0 && !candidateForm[key as keyof typeof candidateForm].trim() ? '#fca5a5' : '#e2e8f0'}`, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', color: '#1e293b' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Validation errors */}
+              {formErrors.length > 0 && (
+                <div style={{ marginTop: 16, padding: '10px 14px', background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 8 }}>
+                  {formErrors.map((e, i) => (
+                    <div key={i} style={{ fontSize: 12, color: '#dc2626', marginBottom: i < formErrors.length - 1 ? 4 : 0 }}>• {e}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Submit button */}
+              <button
+                onClick={submitCandidateForm}
+                disabled={formSubmitting}
+                style={{ marginTop: 22, width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: formSubmitting ? '#94a3b8' : 'linear-gradient(135deg, #0a2540, #e8542f)', color: 'white', fontWeight: 700, fontSize: 15, cursor: formSubmitting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, transition: 'opacity 0.2s' }}
+              >
+                {formSubmitting ? (
+                  <><span style={{ display: 'inline-block', width: 18, height: 18, border: '2.5px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> Saving...</>
+                ) : (
+                  <>✓ Confirm &amp; Join Interview</>
+                )}
+              </button>
+            </div>
           </div>
         )}
         {state === STATES.RECONNECTING && (

@@ -20,6 +20,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     dailyRoomUrl: session.dailyRoomUrl,
     showQuestionText: session.showQuestionText ?? false,
     currentQuestionText: qText,
+    profileAnalysis: session.profileAnalysis || null,
+    candidateInfo: session.candidateInfo || null,
   });
 }
 
@@ -76,6 +78,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Interviewer toggling question text visibility for the candidate
   if (body.showQuestionText !== undefined) {
     await sessionManager.updateSession(id, { showQuestionText: body.showQuestionText });
+    return NextResponse.json({ success: true });
+  }
+
+  // Save candidate info fields + interviewer notes
+  if (body.action === 'save_notes') {
+    const updates: Record<string, unknown> = {};
+    if (body.candidateInfo !== undefined) updates.candidateInfo = body.candidateInfo;
+    if (body.interviewerNotes !== undefined) updates.interviewerNotes = body.interviewerNotes;
+    await sessionManager.updateSession(id, updates as any);
     return NextResponse.json({ success: true });
   }
 

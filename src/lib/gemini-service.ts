@@ -144,7 +144,11 @@ Return ONLY valid JSON:
   "keySkills": ["skill1", "skill2"],
   "careerProgression": "brief assessment",
   "redFlags": ["flag1"] or [],
-  "summary": "2 sentence profile summary"
+  "summary": "2 sentence profile summary",
+  "totalExperience": "e.g. 7 years 3 months — human readable string extracted from resume",
+  "relevantExperience": "e.g. 5 years — experience directly relevant to their primary domain/skill",
+  "highestDegree": "e.g. B.Tech Computer Science, University of Mumbai, 2016",
+  "currentLocation": "e.g. Austin, TX — city/state or country extracted from resume, empty string if not found"
 }`;
 
     const response = await genAI.models.generateContent({

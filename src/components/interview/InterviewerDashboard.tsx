@@ -145,6 +145,21 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
   const [snapshotFlash, setSnapshotFlash] = useState(false);
   const [takingShot, setTakingShot] = useState(false);
 
+  // Candidate profile info (submitted by candidate, editable by interviewer)
+  const [candidateInfo, setCandidateInfo] = useState({
+    totalExperience: '',
+    relevantExperience: '',
+    highestDegree: '',
+    currentLocation: '',
+    currentSalary: '',
+    expectedSalary: '',
+    locationPreference: '',
+    noticePeriod: '',
+  });
+  const [interviewerNotes, setInterviewerNotes] = useState('');
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
   const reportFetchedRef = useRef(false);
@@ -198,6 +213,8 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
           setCandidateConnected(true);
         }
         if (data.profileAnalysis) setProfileAnalysis(data.profileAnalysis);
+        if (data.candidateInfo) setCandidateInfo(prev => ({ ...prev, ...data.candidateInfo }));
+        if (data.interviewerNotes) setInterviewerNotes(data.interviewerNotes);
 
         try {
           const tokenRes = await fetch(`/api/interviews/${sessionId}/daily-token?role=interviewer`);
@@ -460,6 +477,21 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
       body: JSON.stringify(body),
     });
 
+  const saveNotes = async (notesOverride?: string) => {
+    setSavingNotes(true);
+    try {
+      await patchSession({
+        action: 'save_notes',
+        candidateInfo,
+        interviewerNotes: notesOverride !== undefined ? notesOverride : interviewerNotes,
+      });
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2500);
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
   const startInterview = async () => {
     interviewStartedAtRef.current = Date.now();
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -663,7 +695,7 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
             </Card>
           )}
 
-          <Card style={{ textAlign: 'center' }}>
+          <Card style={{ textAlign: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: 14, color: C.text, margin: '0 0 16px', fontWeight: 700 }}>Interviewer Decision</h3>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
               {[
@@ -684,6 +716,84 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
               ))}
             </div>
           </Card>
+
+          {/* ── Candidate Info recap + Interviewer Notes ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: (candidateInfo.totalExperience || candidateInfo.currentLocation || candidateInfo.noticePeriod || candidateInfo.currentSalary) ? '1fr 1fr' : '1fr', gap: 16, marginBottom: 20 }}>
+            <Card>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <h3 style={{ fontSize: 14, color: C.primary, margin: 0, fontWeight: 700 }}>📋 Candidate Details</h3>
+                <button
+                  onClick={() => saveNotes()}
+                  disabled={savingNotes}
+                  style={{
+                    fontSize: 12, fontWeight: 600, padding: '6px 16px', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${notesSaved ? C.green : C.border}`,
+                    background: notesSaved ? C.greenLight : C.surfaceAlt,
+                    color: notesSaved ? C.green : C.textMid,
+                    transition: 'all 0.2s',
+                  }}
+                >{savingNotes ? 'Saving…' : notesSaved ? '✓ Saved' : '💾 Save Changes'}</button>
+              </div>
+              <p style={{ fontSize: 11, color: C.textMuted, margin: '0 0 12px' }}>
+                Pre-filled by candidate. You can correct any field and save.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  { label: 'Total Experience', key: 'totalExperience', placeholder: 'e.g. 7 years' },
+                  { label: 'Relevant Experience', key: 'relevantExperience', placeholder: 'e.g. 5 years React' },
+                  { label: 'Highest Qualification', key: 'highestDegree', placeholder: 'e.g. B.Tech CS' },
+                  { label: 'Current Location', key: 'currentLocation', placeholder: 'e.g. Austin, TX' },
+                  { label: 'Current CTC', key: 'currentSalary', placeholder: 'e.g. $85,000/yr' },
+                  { label: 'Expected CTC', key: 'expectedSalary', placeholder: 'e.g. $105,000/yr' },
+                  { label: 'Location Preference', key: 'locationPreference', placeholder: 'e.g. Remote / Hybrid' },
+                  { label: 'Notice Period', key: 'noticePeriod', placeholder: 'e.g. 30 days' },
+                ].map(({ label, key, placeholder }) => (
+                  <div key={key}>
+                    <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{label}</label>
+                    <input
+                      type="text"
+                      value={candidateInfo[key as keyof typeof candidateInfo] || ''}
+                      onChange={e => setCandidateInfo(prev => ({ ...prev, [key]: e.target.value }))}
+                      placeholder={placeholder}
+                      style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 8, border: `1px solid ${C.border}`, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', color: C.text, background: C.surface }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <h3 style={{ fontSize: 14, color: C.primary, margin: 0, fontWeight: 700 }}>📝 Interviewer Notes</h3>
+                <button
+                  onClick={() => saveNotes()}
+                  disabled={savingNotes}
+                  style={{
+                    fontSize: 12, fontWeight: 600, padding: '6px 16px', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${notesSaved ? C.green : C.border}`,
+                    background: notesSaved ? C.greenLight : C.surfaceAlt,
+                    color: notesSaved ? C.green : C.textMid,
+                    transition: 'all 0.2s',
+                  }}
+                >{savingNotes ? 'Saving…' : notesSaved ? '✓ Saved' : '💾 Save Notes'}</button>
+              </div>
+              <textarea
+                value={interviewerNotes}
+                onChange={e => setInterviewerNotes(e.target.value)}
+                placeholder="Add your observations, overall impression, follow-up points, feedback for the hiring team..."
+                rows={8}
+                style={{
+                  width: '100%', padding: '10px 12px', fontSize: 13, borderRadius: 8,
+                  border: `1px solid ${C.border}`, outline: 'none', resize: 'vertical',
+                  fontFamily: 'inherit', color: C.text, background: C.surface,
+                  lineHeight: 1.6, boxSizing: 'border-box',
+                }}
+              />
+              <p style={{ fontSize: 11, color: C.textMuted, margin: '6px 0 0' }}>
+                Notes are saved to the candidate record and visible in the admin reports.
+              </p>
+            </Card>
+          </div>
         </div>
       </div>
     );
@@ -1004,6 +1114,36 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
             </Card>
           )}
 
+          {/* ── Candidate-submitted profile info (read-only) ── */}
+          {!interviewStarted && status !== 'completed' && (
+            <Card style={{ marginBottom: 16, border: `1px solid ${C.border}` }}>
+              <h3 style={{ fontSize: 14, margin: '0 0 12px', fontWeight: 700, color: C.primary }}>📋 Candidate Profile</h3>
+              {(candidateInfo.totalExperience || candidateInfo.currentSalary || candidateInfo.noticePeriod || candidateInfo.locationPreference) ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    { label: 'Total Experience', value: candidateInfo.totalExperience },
+                    { label: 'Relevant Experience', value: candidateInfo.relevantExperience },
+                    { label: 'Highest Qualification', value: candidateInfo.highestDegree },
+                    { label: 'Current Location', value: candidateInfo.currentLocation },
+                    { label: 'Current CTC', value: candidateInfo.currentSalary },
+                    { label: 'Expected CTC', value: candidateInfo.expectedSalary },
+                    { label: 'Location Preference', value: candidateInfo.locationPreference },
+                    { label: 'Notice Period', value: candidateInfo.noticePeriod },
+                  ].filter(r => r.value).map(row => (
+                    <div key={row.label} style={{ background: C.surfaceAlt, borderRadius: 8, padding: '9px 12px', border: `1px solid ${C.border}` }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{row.label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{row.value}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '16px 0', color: C.textMuted, fontSize: 13 }}>
+                  ⏳ Waiting for candidate to complete their profile form…
+                </div>
+              )}
+            </Card>
+          )}
+
           {!interviewStarted && !generatingReport && status !== 'completed' && (
             <Card style={{ textAlign: 'center', padding: '36px 28px', marginBottom: 16 }}>
               {!candidateConnected ? (
@@ -1298,6 +1438,28 @@ export default function InterviewerDashboard({ sessionId }: { sessionId: string 
                   </div>
                 ))}
               </div>
+            </>
+          )}
+
+          {/* ── Candidate info summary in sidebar ── */}
+          {(candidateInfo.totalExperience || candidateInfo.currentLocation || candidateInfo.expectedSalary || candidateInfo.noticePeriod) && (
+            <>
+              <SectionLabel>Candidate Info</SectionLabel>
+              <Card style={{ padding: 10, marginBottom: 14 }}>
+                {[
+                  { label: 'Total Exp', value: candidateInfo.totalExperience },
+                  { label: 'Relevant', value: candidateInfo.relevantExperience },
+                  { label: 'Notice', value: candidateInfo.noticePeriod },
+                  { label: 'Location Pref', value: candidateInfo.locationPreference },
+                  { label: 'Current CTC', value: candidateInfo.currentSalary },
+                  { label: 'Expected CTC', value: candidateInfo.expectedSalary },
+                ].filter(r => r.value).map((row, i, arr) => (
+                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < arr.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                    <span style={{ fontSize: 10, color: C.textMuted }}>{row.label}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: C.text, maxWidth: 120, textAlign: 'right', wordBreak: 'break-word' }}>{row.value}</span>
+                  </div>
+                ))}
+              </Card>
             </>
           )}
 

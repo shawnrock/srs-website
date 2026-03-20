@@ -13,6 +13,17 @@ export interface Session {
   status: 'scheduled' | 'waiting' | 'in_progress' | 'completed' | 'abandoned';
   showQuestionText?: boolean;
   interviewStartedAt?: string;   // ISO timestamp when status flipped to in_progress
+  candidateInfo?: {              // Candidate-submitted info (filled at interview start)
+    totalExperience?: string;
+    relevantExperience?: string;
+    highestDegree?: string;
+    currentLocation?: string;
+    noticePeriod?: string;
+    locationPreference?: string;
+    currentSalary?: string;
+    expectedSalary?: string;
+  };
+  interviewerNotes?: string;     // Post-interview recruiter comments
   profileAnalysis: any | null;
   createdAt: string;
   lastActivityAt: string;

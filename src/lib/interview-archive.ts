@@ -34,6 +34,17 @@ export interface InterviewRecord {
   strengths?: string[];
   areasForImprovement?: string[];
   sessionId: string;
+  interviewerNotes?: string;
+  candidateInfo?: {
+    totalExperience?: string;
+    relevantExperience?: string;
+    highestDegree?: string;
+    currentLocation?: string;
+    noticePeriod?: string;
+    locationPreference?: string;
+    currentSalary?: string;
+    expectedSalary?: string;
+  };
 }
 
 export interface InterviewerStats {

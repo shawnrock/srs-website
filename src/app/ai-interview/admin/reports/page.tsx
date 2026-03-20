@@ -137,53 +137,101 @@ export default function AdminReportsPage() {
   // ── TABLE: candidate row ───────────────────────────────────
   const CandidateRow = ({ r }: { r: any }) => {
     const rec = scoreLabel(r.recommendation);
+    const [expanded, setExpanded] = useState(false);
+    const hasExtra = r.interviewerNotes || r.candidateInfo?.totalExperience || r.candidateInfo?.noticePeriod || r.candidateInfo?.location || r.candidateInfo?.currentSalary || r.candidateInfo?.expectedSalary;
     return (
-      <tr style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.1s' }}
-        onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-        <td style={{ padding: '12px 14px' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{r.candidateName}</div>
-          <div style={{ fontSize: 11, color: C.textMuted }}>{r.candidateEmail}</div>
-        </td>
-        <td style={{ padding: '12px 14px' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{r.position}</div>
-          <div style={{ fontSize: 11, color: C.textMuted }}>{r.client}</div>
-        </td>
-        <td style={{ padding: '12px 14px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 220 }}>
-            {(r.skills || []).slice(0, 5).map((s: string, i: number) => (
-              <Pill key={i} color={C.blue} bg={C.blueLight}>{s}</Pill>
-            ))}
-            {r.skills?.length > 5 && <Pill>+{r.skills.length - 5}</Pill>}
-          </div>
-        </td>
-        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-          <div style={{ fontWeight: 800, fontSize: 18, color: scoreColor(r.overallScore || 0) }}>
-            {r.overallScore || 0}
-            <span style={{ fontSize: 11, fontWeight: 400, color: C.textMuted }}>/100</span>
-          </div>
-        </td>
-        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-          <Pill color={rec.color} bg={rec.color + '20'}>{rec.label}</Pill>
-        </td>
-        <td style={{ padding: '12px 14px' }}>
-          <div style={{ fontSize: 13, color: C.text }}>{fmtDate(r.interviewDate)}</div>
-          <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(r.interviewDate)}</div>
-        </td>
-        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-          <span style={{ fontSize: 13, color: C.textMid }}>{fmtDur(r.interviewDurationMinutes)}</span>
-        </td>
-        <td style={{ padding: '12px 14px' }}>
-          <div style={{ fontSize: 12, color: C.textMid }}>{r.interviewerName}</div>
-        </td>
-        <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-          <div style={{ fontSize: 11 }}>
-            {r.proctorRedFlags > 0
-              ? <span style={{ color: C.red, fontWeight: 700 }}>🚨 {r.proctorRedFlags} flags</span>
-              : <span style={{ color: C.green }}>✓ Clean</span>}
-          </div>
-        </td>
-      </tr>
+      <>
+        <tr style={{ borderBottom: expanded ? 'none' : `1px solid ${C.border}`, transition: 'background 0.1s', cursor: hasExtra ? 'pointer' : 'default', background: expanded ? '#f0f8ff' : undefined }}
+          onClick={() => hasExtra && setExpanded(e => !e)}>
+          <td style={{ padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {hasExtra && <span style={{ fontSize: 12, color: C.textMuted, transition: 'transform 0.15s', display: 'inline-block', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>}
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{r.candidateName}</div>
+                <div style={{ fontSize: 11, color: C.textMuted }}>{r.candidateEmail}</div>
+              </div>
+            </div>
+          </td>
+          <td style={{ padding: '12px 14px' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{r.position}</div>
+            <div style={{ fontSize: 11, color: C.textMuted }}>{r.client}</div>
+          </td>
+          <td style={{ padding: '12px 14px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 220 }}>
+              {(r.skills || []).slice(0, 5).map((s: string, i: number) => (
+                <Pill key={i} color={C.blue} bg={C.blueLight}>{s}</Pill>
+              ))}
+              {r.skills?.length > 5 && <Pill>+{r.skills.length - 5}</Pill>}
+            </div>
+          </td>
+          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+            <div style={{ fontWeight: 800, fontSize: 18, color: scoreColor(r.overallScore || 0) }}>
+              {r.overallScore || 0}
+              <span style={{ fontSize: 11, fontWeight: 400, color: C.textMuted }}>/100</span>
+            </div>
+          </td>
+          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+            <Pill color={rec.color} bg={rec.color + '20'}>{rec.label}</Pill>
+          </td>
+          <td style={{ padding: '12px 14px' }}>
+            <div style={{ fontSize: 13, color: C.text }}>{fmtDate(r.interviewDate)}</div>
+            <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(r.interviewDate)}</div>
+          </td>
+          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+            <span style={{ fontSize: 13, color: C.textMid }}>{fmtDur(r.interviewDurationMinutes)}</span>
+          </td>
+          <td style={{ padding: '12px 14px' }}>
+            <div style={{ fontSize: 12, color: C.textMid }}>{r.interviewerName}</div>
+          </td>
+          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+            <div style={{ fontSize: 11 }}>
+              {r.proctorRedFlags > 0
+                ? <span style={{ color: C.red, fontWeight: 700 }}>🚨 {r.proctorRedFlags} flags</span>
+                : <span style={{ color: C.green }}>✓ Clean</span>}
+            </div>
+          </td>
+        </tr>
+        {expanded && hasExtra && (
+          <tr style={{ borderBottom: `1px solid ${C.border}`, background: '#f8fbff' }}>
+            <td colSpan={9} style={{ padding: '0 14px 16px 32px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: r.interviewerNotes ? '1fr 1fr' : '1fr', gap: 16, paddingTop: 12 }}>
+                {/* Candidate Info */}
+                {(r.candidateInfo?.totalExperience || r.candidateInfo?.currentSalary || r.candidateInfo?.noticePeriod || r.candidateInfo?.locationPreference) && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>📋 Candidate Details</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {[
+                        { label: 'Total Exp', value: r.candidateInfo?.totalExperience },
+                        { label: 'Relevant Exp', value: r.candidateInfo?.relevantExperience },
+                        { label: 'Qualification', value: r.candidateInfo?.highestDegree },
+                        { label: 'Current Location', value: r.candidateInfo?.currentLocation },
+                        { label: 'Current CTC', value: r.candidateInfo?.currentSalary },
+                        { label: 'Expected CTC', value: r.candidateInfo?.expectedSalary },
+                        { label: 'Location Pref', value: r.candidateInfo?.locationPreference },
+                        { label: 'Notice Period', value: r.candidateInfo?.noticePeriod },
+                      ].filter(f => f.value).map(f => (
+                        <div key={f.label} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px' }}>
+                          <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 600, marginBottom: 3 }}>{f.label}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Interviewer Notes */}
+                {r.interviewerNotes && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>📝 Interviewer Notes</div>
+                    <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '12px 14px', fontSize: 13, color: C.textMid, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                      {r.interviewerNotes}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
     );
   };
 
