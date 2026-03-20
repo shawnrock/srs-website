@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Brain, ArrowRight, CheckCircle, Upload, AlertTriangle, XCircle, ShieldAlert } from "lucide-react";
+import { Brain, ArrowRight, CheckCircle, Upload, AlertTriangle, XCircle, ShieldAlert, FileText, X, Loader2 } from "lucide-react";
 
 interface MismatchResult {
   compatible: boolean;
@@ -26,8 +26,62 @@ export default function SetupInterviewPage() {
     candidateResume: "",
   });
 
+  // Resume upload state
+  const [uploadedFileName, setUploadedFileName] = useState<string>("");
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const parseResumeFile = async (file: File) => {
+    setParseError("");
+    const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'];
+    const nameOk = file.name.match(/\.(pdf|docx|doc)$/i);
+    if (!allowed.includes(file.type) && !nameOk) {
+      setParseError("Only PDF and Word documents (.pdf, .docx) are supported.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setParseError("File is too large. Maximum size is 10 MB.");
+      return;
+    }
+    setParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/parse-resume', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to parse file');
+      setFormData(prev => ({ ...prev, candidateResume: data.text }));
+      setUploadedFileName(file.name);
+    } catch (err: any) {
+      setParseError(err.message);
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) parseResumeFile(file);
+    e.target.value = ''; // reset so same file can be re-uploaded
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) parseResumeFile(file);
+  };
+
+  const clearResume = () => {
+    setFormData(prev => ({ ...prev, candidateResume: '' }));
+    setUploadedFileName('');
+    setParseError('');
   };
 
   const createInterview = async () => {
@@ -287,10 +341,72 @@ export default function SetupInterviewPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                Resume / Profile (paste text)
-                <span className="ml-2 text-gray-400 font-normal">— used for AI compatibility check & question generation</span>
+                Resume / Profile
+                <span className="ml-2 text-gray-400 font-normal">— used for AI compatibility check &amp; question generation</span>
               </label>
-              <textarea name="candidateResume" rows={6} value={formData.candidateResume} onChange={handleChange}
+
+              {/* File upload drop zone */}
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                onClick={() => !parsing && fileInputRef.current?.click()}
+                className={`relative flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl px-6 py-5 cursor-pointer transition-all mb-3
+                  ${dragOver ? 'border-accent bg-accent/5' : 'border-gray-200 hover:border-accent/60 hover:bg-gray-50'}
+                  ${parsing ? 'pointer-events-none opacity-70' : ''}`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={handleFileInput}
+                />
+                {parsing ? (
+                  <div className="flex items-center gap-2 text-accent text-sm font-medium">
+                    <Loader2 size={18} className="animate-spin" />
+                    Extracting text from resume...
+                  </div>
+                ) : uploadedFileName ? (
+                  <div className="flex items-center gap-2 text-green-700 text-sm font-medium">
+                    <FileText size={18} className="text-green-600" />
+                    <span className="truncate max-w-xs">{uploadedFileName}</span>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); clearResume(); }}
+                      className="ml-1 p-0.5 rounded-full hover:bg-red-100 text-red-400 hover:text-red-600 transition-colors"
+                      title="Remove file"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload size={22} className="text-gray-400" />
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-gray-600">
+                        Drop resume here or <span className="text-accent underline">browse</span>
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">PDF or Word (.docx) · Max 10 MB</p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {parseError && (
+                <p className="text-xs text-red-500 mb-2 flex items-center gap-1">
+                  <XCircle size={13} /> {parseError}
+                </p>
+              )}
+
+              {/* Divider */}
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex-1 border-t border-gray-100" />
+                <span className="text-xs text-gray-400">or paste text directly</span>
+                <div className="flex-1 border-t border-gray-100" />
+              </div>
+
+              <textarea name="candidateResume" rows={5} value={formData.candidateResume} onChange={handleChange}
                 placeholder="Paste candidate's resume text here for AI analysis and personalized question generation..."
                 className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent resize-none" />
             </div>
