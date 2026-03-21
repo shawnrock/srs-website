@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   RefreshCw, ExternalLink, Clock, CheckCircle, Circle,
-  AlertCircle, LogOut, Copy, Users, Video,
+  AlertCircle, LogOut, Copy, Users, Video, Plus,
 } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -99,6 +99,11 @@ export default function InterviewerDashboard() {
               title="Refresh">
               <RefreshCw size={18} />
             </button>
+            <Link
+              href="/ai-interview/setup"
+              className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-semibold rounded-lg hover:bg-accent-dark transition-colors">
+              <Plus size={16} /> New Interview
+            </Link>
             <button
               onClick={handleLogout}
               className="p-2 text-gray-400 hover:text-white transition-colors"
