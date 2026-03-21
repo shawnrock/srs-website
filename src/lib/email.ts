@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import PDFDocument from 'pdfkit';
+import { generateICS, googleCalendarUrl } from './calendar';
 
 function createTransporter() {
   return nodemailer.createTransport({
@@ -77,6 +78,160 @@ export async function sendInterviewerInvite({
     `,
   });
   console.log(`[Email] Interviewer invite sent to ${email}`);
+}
+
+/**
+ * Send Google Calendar-compatible .ics invites to both candidate and interviewer
+ * for a scheduled interview. Both recipients get a 15-min reminder popup.
+ */
+export async function sendScheduledInterviewInvites({
+  sessionId,
+  candidate,
+  jd,
+  scheduledAt,
+  interviewUrl,
+  observerUrl,
+  interviewer,
+}: {
+  sessionId: string;
+  candidate: { name: string; email: string };
+  jd: { title: string; client: string };
+  scheduledAt: Date;
+  interviewUrl: string;
+  observerUrl: string;
+  interviewer: { name: string; email: string };
+}) {
+  const transporter = createTransporter();
+  const organizerEmail = process.env.SMTP_USER || 'no-reply@saassrs.com';
+  const organizerName  = 'SRS Infoway AI Interview Platform';
+
+  const title = `Interview – ${jd.title} at ${jd.client}`;
+  const description = [
+    `Position: ${jd.title}`,
+    `Company: ${jd.client}`,
+    `Candidate: ${candidate.name}`,
+    `Interviewer: ${interviewer.name}`,
+  ].join('\n');
+
+  const icsContent = generateICS({
+    uid: sessionId,
+    title,
+    description,
+    startAt: scheduledAt,
+    durationMinutes: 60,
+    organizerEmail,
+    organizerName,
+    attendees: [
+      { name: candidate.name,    email: candidate.email,    role: 'attendee' },
+      { name: interviewer.name,  email: interviewer.email,  role: 'chair'    },
+    ],
+    candidateJoinUrl:  interviewUrl,
+    interviewerJoinUrl: observerUrl,
+  });
+
+  const gcalUrl = googleCalendarUrl({
+    title,
+    startAt: scheduledAt,
+    durationMinutes: 60,
+    description: `${description}\n\nCandidate link: ${interviewUrl}\nInterviewer panel: ${observerUrl}`,
+    attendeeEmails: [candidate.email, interviewer.email],
+  });
+
+  const icsAttachment = {
+    filename: 'interview-invite.ics',
+    content:  Buffer.from(icsContent, 'utf-8'),
+    contentType: 'text/calendar; method=REQUEST',
+  };
+
+  const dateStr = scheduledAt.toLocaleString('en-IN', {
+    dateStyle: 'full', timeStyle: 'short', timeZone: 'Asia/Kolkata',
+  });
+
+  // ── Candidate email ───────────────────────────────────────────────────────
+  await transporter.sendMail({
+    from: FROM,
+    to: `${candidate.name} <${candidate.email}>`,
+    subject: `[Interview Scheduled] ${jd.title} at ${jd.client} – ${dateStr}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f9fafb; border-radius: 12px;">
+        <div style="background: #0a2540; border-radius: 8px; padding: 20px 24px; margin-bottom: 24px;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px;">SRS Infoway — Interview Scheduled</h1>
+        </div>
+        <p style="color: #374151; font-size: 15px;">Dear <strong>${candidate.name}</strong>,</p>
+        <p style="color: #374151; font-size: 15px;">
+          Your AI interview for <strong>${jd.title}</strong> at <strong>${jd.client}</strong> has been scheduled.
+        </p>
+        <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0 0 8px; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase;">Interview Details</p>
+          <p style="margin: 4px 0; color: #111827;"><strong>📅 Date & Time:</strong> ${dateStr}</p>
+          <p style="margin: 4px 0; color: #111827;"><strong>Position:</strong> ${jd.title}</p>
+          <p style="margin: 4px 0; color: #111827;"><strong>Company:</strong> ${jd.client}</p>
+          <p style="margin: 4px 0; color: #111827;"><strong>Duration:</strong> ~60 minutes</p>
+        </div>
+        <div style="text-align: center; margin: 20px 0;">
+          <a href="${interviewUrl}" style="background: #e8542f; color: #fff; text-decoration: none; padding: 13px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block; margin: 0 6px;">
+            Join Interview
+          </a>
+          <a href="${gcalUrl}" style="background: #4285f4; color: #fff; text-decoration: none; padding: 13px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block; margin: 0 6px;">
+            📅 Add to Google Calendar
+          </a>
+        </div>
+        <div style="background: #fef9c3; border: 1px solid #fde047; border-radius: 8px; padding: 12px 16px; margin-top: 16px;">
+          <p style="margin: 0; color: #713f12; font-size: 13px;">
+            ⏰ You will receive a <strong>15-minute reminder</strong> before the interview starts (via Google Calendar notification).
+          </p>
+        </div>
+        <p style="color: #6b7280; font-size: 13px; margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+          The calendar invite (.ics) is attached to this email — it works with Google Calendar, Outlook and Apple Calendar.<br/><br/>
+          Best of luck! · <strong>SRS Infoway Recruitment Team</strong>
+        </p>
+      </div>`,
+    attachments: [icsAttachment],
+  });
+
+  // ── Interviewer email ─────────────────────────────────────────────────────
+  await transporter.sendMail({
+    from: FROM,
+    to: `${interviewer.name} <${interviewer.email}>`,
+    subject: `[Interview Scheduled] ${candidate.name} – ${jd.title} – ${dateStr}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f9fafb; border-radius: 12px;">
+        <div style="background: #0a2540; border-radius: 8px; padding: 20px 24px; margin-bottom: 24px;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px;">SRS Infoway — Interview Scheduled</h1>
+        </div>
+        <p style="color: #374151; font-size: 15px;">Hi <strong>${interviewer.name}</strong>,</p>
+        <p style="color: #374151; font-size: 15px;">
+          An interview has been scheduled for candidate <strong>${candidate.name}</strong>.
+        </p>
+        <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+          <p style="margin: 0 0 8px; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase;">Interview Details</p>
+          <p style="margin: 4px 0; color: #111827;"><strong>📅 Date & Time:</strong> ${dateStr}</p>
+          <p style="margin: 4px 0; color: #111827;"><strong>Candidate:</strong> ${candidate.name} (${candidate.email})</p>
+          <p style="margin: 4px 0; color: #111827;"><strong>Position:</strong> ${jd.title}</p>
+          <p style="margin: 4px 0; color: #111827;"><strong>Company:</strong> ${jd.client}</p>
+        </div>
+        <div style="text-align: center; margin: 20px 0;">
+          <a href="${observerUrl}" style="background: #0a2540; color: #fff; text-decoration: none; padding: 13px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block; margin: 0 6px;">
+            Open Interviewer Panel
+          </a>
+          <a href="${gcalUrl}" style="background: #4285f4; color: #fff; text-decoration: none; padding: 13px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block; margin: 0 6px;">
+            📅 Add to Google Calendar
+          </a>
+        </div>
+        <div style="background: #fef9c3; border: 1px solid #fde047; border-radius: 8px; padding: 12px 16px; margin-top: 16px;">
+          <p style="margin: 0; color: #713f12; font-size: 13px;">
+            ⏰ A <strong>15-minute reminder</strong> is set in the calendar invite. You'll also see an alert on your interview dashboard.
+          </p>
+        </div>
+        <p style="color: #6b7280; font-size: 13px; margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+          The calendar invite (.ics) is attached — imports directly into Google Calendar, Outlook and Apple Calendar.<br/><br/>
+          SRS Infoway Recruitment Team
+        </p>
+      </div>`,
+    attachments: [icsAttachment],
+  });
+
+  console.log(`[Email] Scheduled interview invites sent to ${candidate.email} and ${interviewer.email}`);
 }
 
 /**

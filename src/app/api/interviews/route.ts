@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     observerUrl: s.observerUrl,
     recruiterEmail: s.recruiterEmail,
     recruiterName: s.recruiterName,
+    scheduledAt: s.scheduledAt ?? null,
     questionsCount: s.questions?.length || 0,
   })));
 }
@@ -26,13 +27,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { jd, candidate, recruiterEmail, recruiterName } = body;
+    const { jd, candidate, recruiterEmail, recruiterName, scheduledAt } = body;
 
     if (!jd?.title || !jd?.description || !candidate?.name || !candidate?.email) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const session = await sessionManager.createSession(jd, candidate, recruiterEmail, recruiterName);
+    const session = await sessionManager.createSession(jd, candidate, recruiterEmail, recruiterName, scheduledAt ?? undefined);
 
     // Generate questions and profile analysis in parallel
     const [questions, profileAnalysis] = await Promise.allSettled([
@@ -76,6 +77,7 @@ export async function POST(req: NextRequest) {
       status: session.status,
       interviewUrl: session.interviewUrl,
       observerUrl: session.observerUrl,
+      scheduledAt: session.scheduledAt ?? null,
       questionsCount: finalQuestions.length,
       candidate: updatedCandidate,
       jd: session.jd,
