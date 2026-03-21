@@ -87,41 +87,71 @@ export default function InterviewerDashboard() {
   const scheduled   = sessions.filter(s => s.status === "scheduled" || s.status === "waiting").length;
 
   return (
-    <div className="min-h-screen bg-surface">
+    <div className="min-h-screen" style={{ background: '#f4f6fb' }}>
 
-      {/* Header */}
-      <header className="bg-primary border-b border-primary-light">
+      {/* ── Interviewer action bar ── */}
+      <div style={{ background: '#0a2540', borderBottom: '1px solid #1e3a5f' }}>
         <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-white">My Interviews</h1>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Welcome back, <span className="text-white font-medium">{user?.name}</span>
-              {" "}· {user?.email}
+            <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+              Welcome back,{' '}
+              <span className="text-white font-semibold">{user?.name}</span>
+              {' '}·{' '}{user?.email}
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => user && fetchSessions(user.email)}
-              className="p-2 text-gray-400 hover:text-white transition-colors"
+              style={{ color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: 8, borderRadius: 8 }}
               title="Refresh">
               <RefreshCw size={18} />
             </button>
             <Link
               href="/ai-interview/setup"
-              className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-semibold rounded-lg hover:bg-accent-dark transition-colors">
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 18px', background: '#e8542f', color: '#fff',
+                fontSize: 14, fontWeight: 700, borderRadius: 8, textDecoration: 'none',
+              }}>
               <Plus size={16} /> New Interview
             </Link>
             <button
               onClick={handleLogout}
-              className="p-2 text-gray-400 hover:text-white transition-colors"
+              style={{ color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: 8, borderRadius: 8 }}
               title="Logout">
               <LogOut size={18} />
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
       <main className="max-w-7xl mx-auto px-8 py-8">
+
+        {/* ── Quick actions ── */}
+        <div style={{ display: 'flex', gap: 16, marginBottom: 28 }}>
+          <Link
+            href="/ai-interview/setup"
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', gap: 16,
+              padding: '20px 24px', background: '#fff', borderRadius: 12,
+              border: '2px dashed #e8542f', textDecoration: 'none', transition: 'all 0.15s',
+            }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 12,
+              background: '#fff5f2', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <Plus size={24} color="#e8542f" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#0a2540' }}>Start New Interview</div>
+              <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
+                Set up a new interview session for a candidate
+              </div>
+            </div>
+          </Link>
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
