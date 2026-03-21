@@ -78,6 +78,16 @@ export const ADMIN_USERS: Record<string, { password: string; name: string }> = {
   'admin@srsinfoway.com':              { password: 'SRS@Admin2026', name: 'SRS Admin'  },
 };
 
+// ─── Hardcoded Interviewer Accounts (built-in test / seed accounts) ───────────
+// These behave exactly like Redis-provisioned interviewers but are always
+// available without needing an invite. Location restrictions are skipped for
+// these accounts (same as admins) so they are easy to use during testing.
+
+export const HARDCODED_INTERVIEWERS: Record<string, { password: string; name: string }> = {
+  'priya.m@srsinfoway.com':     { password: 'SRS@Priya2026',  name: 'Priya M'      },
+  'dhivyapriya@srsinfoway.com': { password: 'SRS@Dhivya2026', name: 'Dhivya Priya' },
+};
+
 // ─── Crypto Helpers ───────────────────────────────────────────────────────────
 
 export function hashPassword(password: string): string {

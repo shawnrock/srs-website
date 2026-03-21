@@ -137,6 +137,29 @@ export default function AIInterviewLoginPage() {
             <p>• Logins from new locations require administrator approval</p>
             <p>• Only one active session is allowed per account at a time</p>
           </div>
+
+          {/* Test credentials — remove before go-live */}
+          <details className="mt-4 border border-dashed border-gray-200 rounded-lg">
+            <summary className="px-4 py-2 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600">
+              🔑 Test Credentials (dev only)
+            </summary>
+            <div className="px-4 pb-4 pt-2 space-y-2">
+              {[
+                { label: "Admin",       email: "admin@srsinfoway.com",              pw: "SRS@Admin2026"  },
+                { label: "Admin",       email: "project.developers@srsinfoway.com", pw: "SRS@Dev2026"    },
+                { label: "Interviewer", email: "priya.m@srsinfoway.com",            pw: "SRS@Priya2026"  },
+                { label: "Interviewer", email: "dhivyapriya@srsinfoway.com",        pw: "SRS@Dhivya2026" },
+              ].map(u => (
+                <div key={u.email} className="text-xs font-mono bg-gray-50 rounded p-2 border border-gray-100">
+                  <span className={`inline-block mr-2 px-1.5 py-0.5 rounded text-white font-sans text-[10px] font-semibold ${u.label === "Admin" ? "bg-primary" : "bg-teal"}`}>
+                    {u.label}
+                  </span>
+                  <span className="text-gray-700">{u.email}</span>
+                  <div className="text-gray-400 mt-0.5 pl-16">pw: {u.pw}</div>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
       </div>
     </section>

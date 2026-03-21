@@ -34,6 +34,7 @@ export interface Session {
   dailyRoomUrl?: string;
   recruiterEmail?: string;
   recruiterName?: string;
+  scheduledAt?: string;          // ISO timestamp for scheduled interviews (null = instant)
 }
 
 const SESSION_TTL = 60 * 60 * 24; // 24 hours in seconds
@@ -59,7 +60,7 @@ class SessionManager {
     return SessionManager.instance;
   }
 
-  async createSession(jd: Session['jd'], candidate: Session['candidate'], recruiterEmail?: string, recruiterName?: string): Promise<Session> {
+  async createSession(jd: Session['jd'], candidate: Session['candidate'], recruiterEmail?: string, recruiterName?: string, scheduledAt?: string): Promise<Session> {
     const id = uuidv4();
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const session: Session = {
@@ -73,6 +74,7 @@ class SessionManager {
       report: null,
       recruiterEmail,
       recruiterName,
+      scheduledAt,
     };
     if (isRedisConfigured()) {
       await getRedis().setex(`session:${id}`, SESSION_TTL, session);

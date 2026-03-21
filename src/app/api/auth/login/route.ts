@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   ADMIN_USERS,
+  HARDCODED_INTERVIEWERS,
   getInterviewerByEmail,
   verifyPassword,
   fingerprintRequest,
@@ -42,7 +43,22 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── Interviewer login ────────────────────────────────────────────────────
+    // ── Hardcoded interviewer accounts (built-in test accounts, no location check) ─
+    if (HARDCODED_INTERVIEWERS[lower]) {
+      const iv = HARDCODED_INTERVIEWERS[lower];
+      if (iv.password !== password)
+        return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
+
+      const session = await createAuthSession(
+        `interviewer:${lower}`, lower, iv.name, 'Interviewer', fp,
+      );
+      return NextResponse.json({
+        token: session.token,
+        user: { email: lower, name: iv.name, role: 'Interviewer' },
+      });
+    }
+
+    // ── Redis-provisioned interviewer login ──────────────────────────────────
     const interviewer = await getInterviewerByEmail(lower);
     if (!interviewer)
       return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
@@ -67,22 +83,16 @@ export async function POST(req: NextRequest) {
     const knownFp  = approved.find(loc => loc.fingerprint === fp);
 
     if (knownFp) {
-      // Known location — update lastUsedAt and proceed
       const updatedLocs = approved.map(loc =>
-        loc.fingerprint === fp
-          ? { ...loc, lastUsedAt: new Date().toISOString() }
-          : loc,
+        loc.fingerprint === fp ? { ...loc, lastUsedAt: new Date().toISOString() } : loc,
       );
       await updateInterviewer(interviewer.id, {
         approvedLocations: updatedLocs,
         lastLoginAt: new Date().toISOString(),
       });
     } else {
-      // New / unknown location ------------------------------------------------
       const uaSummary = summarizeUA(ua);
-
       if (approved.length < 2) {
-        // Auto-approve first two locations
         const newLoc: ApprovedLocation = {
           id: uuidv4(),
           fingerprint: fp,
@@ -98,19 +108,13 @@ export async function POST(req: NextRequest) {
           lastLoginAt: new Date().toISOString(),
         });
       } else {
-        // 2 locations already registered — check for duplicate pending request
         const pending = await getPendingLocationRequests();
         const alreadyPending = pending.some(
           r => r.interviewerId === interviewer.id && r.fingerprint === fp,
         );
         if (!alreadyPending) {
           await createLocationRequest(
-            interviewer.id,
-            interviewer.email,
-            interviewer.name,
-            fp,
-            ip,
-            uaSummary,
+            interviewer.id, interviewer.email, interviewer.name, fp, ip, uaSummary,
           );
         }
         return NextResponse.json(
