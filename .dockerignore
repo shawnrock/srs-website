@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Env files — never ship secrets
+.env
+.env.local
+.env.*.local
+
+# Build artifacts that cause mount conflicts
+tsconfig.tsbuildinfo
+
+# Dev logs and temp files
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+
+# Test files
+coverage/
+__tests__/
+
+# Local dev only
+Daily status for AI interviewer/
