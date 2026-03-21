@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, RefreshCw, ExternalLink, Users, Clock, CheckCircle, Circle, AlertCircle, LogOut, Copy, Trash2, Mail } from "lucide-react";
+import { Plus, RefreshCw, ExternalLink, Users, Clock, CheckCircle, Circle, AlertCircle, LogOut, Copy, Trash2, Mail, UserCog } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   scheduled: { label: "Scheduled", color: "#a16207", bg: "#fef9c3" },
@@ -83,7 +83,14 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [router, fetchSessions]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      const raw = localStorage.getItem("ai_interview_auth");
+      const token = raw ? JSON.parse(raw)?.token : null;
+      if (token) {
+        await fetch("/api/auth/logout", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      }
+    } catch { /* ignore */ }
     localStorage.removeItem("ai_interview_auth");
     router.push("/ai-interview/login");
   };
@@ -106,6 +113,11 @@ export default function AdminDashboard() {
               className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors"
               style={{ background: '#e8f0fb', color: '#0a2540', border: '1px solid #c7d2fe' }}>
               📊 Reports & Analytics
+            </Link>
+            <Link href="/ai-interview/admin/interviewers"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors"
+              style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+              <UserCog size={15} /> Interviewers
             </Link>
             <Link href="/ai-interview/setup"
               className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-semibold rounded-lg hover:bg-accent-dark transition-colors">

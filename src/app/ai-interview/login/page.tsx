@@ -1,35 +1,56 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
-
-// Test accounts — replace with a real auth provider in production
-const USERS: Record<string, { password: string; name: string; role: string }> = {
-  "project.developers@srsinfoway.com": { password: "SRS@Dev2026",  name: "Dev Team",      role: "Admin"     },
-  "priya.m@srsinfoway.com":            { password: "SRS@Priya2026", name: "Priya M",       role: "Recruiter" },
-  "dhivyapriya@srsinfoway.com":        { password: "SRS@Dhivya2026",name: "Dhivya Priya",  role: "Recruiter" },
-  "admin@srsinfoway.com":              { password: "SRS@Admin2026", name: "SRS Admin",     role: "Admin"     },
-};
+import { Shield, Mail, Lock, Eye, EyeOff, ArrowRight, Loader } from "lucide-react";
 
 export default function AIInterviewLoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
+  const [error,        setError]        = useState("");
+  const [loading,      setLoading]      = useState(false);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const form = e.currentTarget;
-    const email = (form.elements.namedItem("email") as HTMLInputElement).value.trim().toLowerCase();
+    setError("");
+
+    const form     = e.currentTarget;
+    const email    = (form.elements.namedItem("email") as HTMLInputElement).value.trim().toLowerCase();
     const password = (form.elements.namedItem("password") as HTMLInputElement).value;
 
-    const user = USERS[email];
-    if (user && user.password === password) {
-      localStorage.setItem("ai_interview_auth", JSON.stringify({ email, name: user.name, role: user.role, loggedIn: true }));
-      router.push("/ai-interview/admin");
-    } else if (!email || !password) {
+    if (!email || !password) {
       setError("Please enter your email and password.");
-    } else {
-      setError("Invalid email or password. Please try again.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res  = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Login failed. Please try again.");
+        return;
+      }
+
+      // Persist auth info for client-side page guards and API calls
+      localStorage.setItem(
+        "ai_interview_auth",
+        JSON.stringify({
+          email:    data.user.email,
+          name:     data.user.name,
+          role:     data.user.role,
+          token:    data.token,
+          loggedIn: true,
+        }),
+      );
+
+      router.push("/ai-interview/admin");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -48,7 +69,14 @@ export default function AIInterviewLoginPage() {
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{error}</div>
+            <div className={`mb-4 p-3 rounded-lg text-sm border ${
+              error.includes("location")
+                ? "bg-amber-50 border-amber-200 text-amber-800"
+                : "bg-red-50 border-red-200 text-red-600"
+            }`}>
+              {error.includes("location") && <div className="font-semibold mb-1">⚠ New Location Detected</div>}
+              {error}
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -56,25 +84,41 @@ export default function AIInterviewLoginPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Email Address</label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input name="email" type="email" required placeholder="you@srsinfoway.com"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" />
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="you@srsinfoway.com"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                />
               </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Password</label>
               <div className="relative">
                 <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input name="password" type={showPassword ? "text" : "password"} required placeholder="Enter your password"
-                  className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                <input
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  placeholder="Enter your password"
+                  className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
-            <button type="submit"
-              className="w-full py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent-dark transition-colors text-sm flex items-center justify-center gap-2">
-              Sign In <ArrowRight size={16} />
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent-dark transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+              {loading
+                ? <><Loader size={16} className="animate-spin" /> Signing in…</>
+                : <>Sign In <ArrowRight size={16} /></>}
             </button>
           </form>
 
@@ -82,25 +126,12 @@ export default function AIInterviewLoginPage() {
             Protected by enterprise-grade security. Authorized personnel only.
           </p>
 
-          {/* Test credentials panel — remove before go-live */}
-          <details className="mt-6 border border-dashed border-gray-200 rounded-lg">
-            <summary className="px-4 py-2 text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600">
-              🔑 Test Credentials (dev only)
-            </summary>
-            <div className="px-4 pb-4 pt-2 space-y-2">
-              {[
-                { email: "project.developers@srsinfoway.com", password: "SRS@Dev2026",   role: "Admin"     },
-                { email: "priya.m@srsinfoway.com",            password: "SRS@Priya2026", role: "Recruiter" },
-                { email: "dhivyapriya@srsinfoway.com",        password: "SRS@Dhivya2026",role: "Recruiter" },
-                { email: "admin@srsinfoway.com",              password: "SRS@Admin2026", role: "Admin"     },
-              ].map((u) => (
-                <div key={u.email} className="text-xs font-mono bg-gray-50 rounded p-2 border border-gray-100">
-                  <div className="text-gray-700">{u.email}</div>
-                  <div className="text-gray-500">pw: {u.password} <span className="ml-2 text-accent font-sans font-semibold">[{u.role}]</span></div>
-                </div>
-              ))}
-            </div>
-          </details>
+          <div className="mt-4 p-3 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-500 space-y-1">
+            <p className="font-semibold text-gray-600">Security Notice:</p>
+            <p>• Your login location is tracked to prevent unauthorised access</p>
+            <p>• Logins from new locations require administrator approval</p>
+            <p>• Only one active session is allowed per account at a time</p>
+          </div>
         </div>
       </div>
     </section>

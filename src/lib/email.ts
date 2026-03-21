@@ -19,6 +19,67 @@ function createTransporter() {
 const FROM = process.env.SMTP_FROM || 'SRS Infoway AI Interview <no-reply@saassrs.com>';
 
 /**
+ * Send interviewer onboarding invite email with a set-password link.
+ */
+export async function sendInterviewerInvite({
+  name,
+  email,
+  inviteUrl,
+  invitedBy,
+}: {
+  name: string;
+  email: string;
+  inviteUrl: string;
+  invitedBy: string;
+}) {
+  const transporter = createTransporter();
+  await transporter.sendMail({
+    from: FROM,
+    to: `${name} <${email}>`,
+    subject: 'You have been invited to SRS Infoway AI Interview Platform',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f9fafb; border-radius: 12px;">
+        <div style="background: #0a2540; border-radius: 8px; padding: 20px 24px; margin-bottom: 24px;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px;">SRS Infoway — AI Interview Platform</h1>
+        </div>
+
+        <p style="color: #374151; font-size: 15px;">Hi <strong>${name}</strong>,</p>
+
+        <p style="color: #374151; font-size: 15px;">
+          <strong>${invitedBy}</strong> has invited you to join the SRS Infoway AI Interview Platform as an Interviewer.
+        </p>
+
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+          <p style="margin: 0 0 8px; color: #166534; font-weight: 600; font-size: 13px;">What happens next:</p>
+          <ol style="margin: 0; padding-left: 20px; color: #166534; font-size: 13px;">
+            <li>Click the button below to set up your password</li>
+            <li>Log in with your email and new password</li>
+            <li>You can access the platform from up to <strong>2 devices/locations</strong></li>
+          </ol>
+        </div>
+
+        <div style="text-align: center; margin: 28px 0;">
+          <a href="${inviteUrl}"
+            style="background: #e8542f; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block;">
+            Accept Invite &amp; Set Password
+          </a>
+        </div>
+
+        <p style="color: #6b7280; font-size: 13px;">
+          This link expires in <strong>72 hours</strong>. If you did not expect this invitation, you can safely ignore this email.
+        </p>
+
+        <p style="color: #6b7280; font-size: 13px; margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+          SRS Infoway Recruitment Team<br/>
+          <a href="https://www.srsinfoway.com" style="color: #0097a7; text-decoration: none;">www.srsinfoway.com</a>
+        </p>
+      </div>
+    `,
+  });
+  console.log(`[Email] Interviewer invite sent to ${email}`);
+}
+
+/**
  * Send interview invitation to the candidate.
  */
 export async function sendCandidateInvite({

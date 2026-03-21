@@ -3,6 +3,51 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
+// ---------------------------------------------------------------------------
+// Polyfill browser-only APIs that pdfjs-dist (used by pdf-parse) requires
+// when running in a Node.js server context (Next.js API route).
+// ---------------------------------------------------------------------------
+if (typeof (globalThis as any).DOMMatrix === 'undefined') {
+  (globalThis as any).DOMMatrix = class DOMMatrix {
+    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+    m11 = 1; m12 = 0; m13 = 0; m14 = 0;
+    m21 = 0; m22 = 1; m23 = 0; m24 = 0;
+    m31 = 0; m32 = 0; m33 = 1; m34 = 0;
+    m41 = 0; m42 = 0; m43 = 0; m44 = 1;
+    is2D = true;
+    isIdentity = true;
+    constructor(_init?: string | number[]) {}
+    static fromFloat32Array(_a: Float32Array) { return new (globalThis as any).DOMMatrix(); }
+    static fromFloat64Array(_a: Float64Array) { return new (globalThis as any).DOMMatrix(); }
+    static fromMatrix(_o?: unknown) { return new (globalThis as any).DOMMatrix(); }
+    multiply(_o?: unknown) { return this; }
+    translate(_tx = 0, _ty = 0, _tz = 0) { return this; }
+    scale(_s = 1, _ox = 0, _oy = 0) { return this; }
+    rotate(_a = 0, _ox = 0, _oy = 0) { return this; }
+    inverse() { return this; }
+    transformPoint(_p?: unknown) { return { x: 0, y: 0, z: 0, w: 1 }; }
+    toFloat32Array() { return new Float32Array(16); }
+    toFloat64Array() { return new Float64Array(16); }
+    toString() { return 'matrix(1, 0, 0, 1, 0, 0)'; }
+  };
+}
+
+if (typeof (globalThis as any).Path2D === 'undefined') {
+  (globalThis as any).Path2D = class Path2D {
+    constructor(_d?: string | Path2D) {}
+    addPath(_p: unknown, _t?: unknown) {}
+    closePath() {}
+    moveTo(_x: number, _y: number) {}
+    lineTo(_x: number, _y: number) {}
+    bezierCurveTo(_cp1x: number, _cp1y: number, _cp2x: number, _cp2y: number, _x: number, _y: number) {}
+    quadraticCurveTo(_cpx: number, _cpy: number, _x: number, _y: number) {}
+    arc(_x: number, _y: number, _r: number, _sa: number, _ea: number, _ac?: boolean) {}
+    arcTo(_x1: number, _y1: number, _x2: number, _y2: number, _r: number) {}
+    ellipse(_x: number, _y: number, _rx: number, _ry: number, _rot: number, _sa: number, _ea: number, _ac?: boolean) {}
+    rect(_x: number, _y: number, _w: number, _h: number) {}
+  };
+}
+
 // POST /api/parse-resume
 // Accepts multipart/form-data with a "file" field (PDF or DOCX)
 // Returns { text: string }
