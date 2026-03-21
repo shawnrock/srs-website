@@ -205,7 +205,7 @@ function DailyReportTab({ interviewers, recent }: { interviewers: any[]; recent:
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: '#f8fafc', borderBottom: `2px solid ${C.border}` }}>
-                        {['Time', 'Candidate', 'Email', 'Position / Client', 'Duration', 'Score', 'Result'].map(h => (
+                        {['Time', 'Candidate', 'Email', 'Position / Client', 'Duration', 'Score', 'Result', ''].map(h => (
                           <th key={h} style={{ padding: '9px 14px', fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                         ))}
                       </tr>
@@ -231,6 +231,13 @@ function DailyReportTab({ interviewers, recent }: { interviewers: any[]; recent:
                                 : <span style={{ color: C.textMuted, fontSize: 12 }}>—</span>}
                             </td>
                             <td style={{ padding: '11px 14px' }}><Badge label={rec.label} color={rec.color} bg={rec.bg} /></td>
+                            <td style={{ padding: '11px 14px' }}>
+                              <a href={`/ai-interview/report/${r.id || r.sessionId}`} target="_blank" rel="noopener noreferrer"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7,
+                                  background: '#0a2540', color: '#fff', fontSize: 11, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                📄 View Report
+                              </a>
+                            </td>
                           </tr>
                         );
                       })}
@@ -406,7 +413,7 @@ function CandidateSearchTab({ interviewers }: { interviewers: any[] }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ background: '#f8fafc', borderBottom: `2px solid ${C.border}` }}>
-                    {['Candidate', 'Position / Client', 'Interviewer', 'Date', 'Duration', 'Score', 'Result', 'Proctoring'].map(h => (
+                    {['Candidate', 'Position / Client', 'Interviewer', 'Date', 'Duration', 'Score', 'Result', 'Proctoring', ''].map(h => (
                       <th key={h} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -445,6 +452,13 @@ function CandidateSearchTab({ interviewers }: { interviewers: any[] }) {
                           {(r.proctorRedFlags || 0) > 0
                             ? <span style={{ color: C.red, fontWeight: 700, fontSize: 12 }}>🚨 {r.proctorRedFlags} flags</span>
                             : <span style={{ color: C.green, fontSize: 12 }}>✓ Clean</span>}
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          <a href={`/ai-interview/report/${r.id || r.sessionId}`} target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 7,
+                              background: '#0a2540', color: '#fff', fontSize: 11, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            📄 View Report
+                          </a>
                         </td>
                       </tr>
                     );
