@@ -76,8 +76,10 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    const auth = localStorage.getItem("ai_interview_auth");
-    if (!auth) { router.push("/ai-interview/login"); return; }
+    const raw = localStorage.getItem("ai_interview_auth");
+    if (!raw) { router.push("/ai-interview/login"); return; }
+    const auth = JSON.parse(raw);
+    if (auth.role !== "Admin") { router.push("/ai-interview/interviewer"); return; }
     fetchSessions();
     const interval = setInterval(fetchSessions, 15000);
     return () => clearInterval(interval);

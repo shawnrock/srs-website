@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sessionManager } from '@/lib/session-manager';
 import { geminiService } from '@/lib/gemini-service';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const recruiterEmail = new URL(req.url).searchParams.get('recruiterEmail')?.toLowerCase() ?? null;
   const sessions = await sessionManager.getAllSessions();
-  return NextResponse.json(sessions.map(s => ({
+  const filtered = recruiterEmail
+    ? sessions.filter(s => s.recruiterEmail?.toLowerCase() === recruiterEmail)
+    : sessions;
+  return NextResponse.json(filtered.map(s => ({
     id: s.id,
     status: s.status,
     candidate: s.candidate,
@@ -13,6 +17,8 @@ export async function GET() {
     lastActivityAt: s.lastActivityAt,
     interviewUrl: s.interviewUrl,
     observerUrl: s.observerUrl,
+    recruiterEmail: s.recruiterEmail,
+    recruiterName: s.recruiterName,
     questionsCount: s.questions?.length || 0,
   })));
 }

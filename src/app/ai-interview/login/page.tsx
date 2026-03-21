@@ -48,7 +48,12 @@ export default function AIInterviewLoginPage() {
         }),
       );
 
-      router.push("/ai-interview/admin");
+      // Route based on role
+      if (data.user.role === "Admin") {
+        router.push("/ai-interview/admin");
+      } else {
+        router.push("/ai-interview/interviewer");
+      }
     } finally {
       setLoading(false);
     }
