@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   RefreshCw, ExternalLink, Clock, CheckCircle, Circle,
-  AlertCircle, LogOut, Copy, Users, Video, Plus,
+  AlertCircle, LogOut, Copy, Users, Video, Plus, Trash2,
 } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -73,6 +73,13 @@ export default function InterviewerDashboard() {
     navigator.clipboard.writeText(link);
     setCopiedId(sessionId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Interviewers may only delete interviews where the candidate has NOT yet joined
+  const deleteSession = async (sessionId: string) => {
+    if (!confirm("Delete this interview? This cannot be undone.")) return;
+    await fetch(`/api/interviews/${sessionId}`, { method: "DELETE" });
+    setSessions(prev => prev.filter(s => s.id !== sessionId));
   };
 
   const inProgress  = sessions.filter(s => s.status === "in_progress").length;
@@ -211,6 +218,16 @@ export default function InterviewerDashboard() {
                           <CheckCircle size={12} />
                           View Report
                         </Link>
+                      )}
+
+                      {/* Delete — only allowed before candidate joins (scheduled / waiting) */}
+                      {(s.status === "scheduled" || s.status === "waiting") && (
+                        <button
+                          onClick={() => deleteSession(s.id)}
+                          title="Delete interview (only available before candidate joins)"
+                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   </div>

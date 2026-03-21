@@ -26,6 +26,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [emailingId, setEmailingId] = useState<string | null>(null);
@@ -80,6 +81,7 @@ export default function AdminDashboard() {
     if (!raw) { router.push("/ai-interview/login"); return; }
     const auth = JSON.parse(raw);
     if (auth.role !== "Admin") { router.push("/ai-interview/interviewer"); return; }
+    setIsAdmin(auth.role === "Admin");
     fetchSessions();
     const interval = setInterval(fetchSessions, 15000);
     return () => clearInterval(interval);
@@ -218,9 +220,9 @@ export default function AdminDashboard() {
                           </button>
                         </>
                       )}
-                      {s.status !== "in_progress" && (
+                      {isAdmin && s.status !== "in_progress" && (
                         <button onClick={() => deleteSession(s.id)}
-                          title="Delete this interview"
+                          title="Delete this interview (Admin only)"
                           className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                           <Trash2 size={14} />
                         </button>
